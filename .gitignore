@@ -1,0 +1,11 @@
+# Archivos de entradas y salidas generados por el agente
+inputs/*
+!inputs/.gitkeep
+outputs/*
+!outputs/.gitkeep
+
+# Archivos de caché o sistema (ej. Python / Windows / Mac)
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
