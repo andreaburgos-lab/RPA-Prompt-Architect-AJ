@@ -147,38 +147,164 @@ Si dice "detiene + notifica con mensaje X + registra 'Sin procesar' en columna S
 
 ---
 
-## Paso 4 — Activar skills en secuencia
+## Paso 4 — Activar skills de análisis
 
-Ejecutar en este orden SIEMPRE:
+Ejecutar en este orden:
 
 1. **`clasificar-tecnologia`** → determina `tech_label`, `tech_key`, `es_hibrido`
-2. **`generar-analisis`** → produce el JSON de análisis estructurado → guardar en `outputs/`
-3. Según `tech_key`:
-   - `power_automate_desktop` → **`generar-prompts-pad`**
-   - `power_automate_cloud` → **`generar-prompts-cloud`**
-   - `power_automate_hybrid` → **`hibrido`** (coordina los dos anteriores)
-   - Otros → **`generar-prompts-pad`** con nota de tecnología genérica
+2. **`generar-analisis`** → produce el JSON de análisis estructurado → guardar en `outputs/<CODIGO>_analisis.json`
 
 ---
 
-## Paso 5 — Confirmar al usuario
+## Paso 5 — Clasificar severidad de gaps y decidir camino
 
-Al finalizar mostrar:
+Después de guardar el JSON de análisis, revisar TODOS los requerimientos y sub-requerimientos.
+Contar los gaps totales para determinar cuál de los tres caminos seguir.
 
-> ✅ Proceso completado para **[CODIGO]** — [titulo del proyecto]
+### Definiciones de severidad
+
+**Gap CRÍTICO** (`gaps.criticos` no vacío):
+Sistema no definido, nombre de req faltante, sin descripción ni acciones.
+Estos impiden implementar el req incluso con intervención del Dev.
+
+**Gap MENOR** (`gaps.advertencias` no vacío, `informacion_faltante` no vacío):
+Input/output no especificado, URL faltante, regla de negocio implícita, script requerido.
+El Dev puede resolverlos con una pregunta puntual sin necesidad de reescribir el PDD completo.
+
+---
+
+### Camino 🔴 — PDD muy roto (muchos gaps críticos)
+
+**Condición:** 3 o más requerimientos tienen `gaps.criticos` no vacío.
+
+**Acción:** DETENER AQUÍ completamente.
+→ NO generar prompts. NO hacer preguntas al Dev.
+→ Mostrar **Resumen Ejecutivo de Gaps** (ver formato abajo).
+→ El PDD debe regresar a BA para corrección profunda antes de cualquier avance.
+
+---
+
+### Camino 🟡 — Casi listo (pocos gaps menores)
+
+**Condición:** 0 requerimientos con gaps críticos Y al menos 1 req tiene gaps menores
+(advertencias, informacion_faltante).
+
+**Acción:** MODO INTERACTIVO — el agente hace preguntas directas al Dev en el chat.
+
+**Pasos del modo interactivo:**
+
+1. Mostrar resumen breve de reqs con gaps menores.
+
+2. Hacer las preguntas necesarias de forma directa y concisa. Por cada gap menor:
+   - Gaps de INPUT/OUTPUT faltante → "¿Cuál es el nombre/ruta del archivo de entrada para [REQ_ID] — [nombre]?"
+   - Gaps de URL/sistema → "¿Cuál es la URL del sistema [Sistema] para [REQ_ID]?"
+   - Gaps de trigger → "¿Cuál es el asunto exacto del correo que dispara [REQ_ID]?"
+   - Gaps de regla de negocio → "Para [REQ_ID]: [descripción de la lógica implícita] — ¿cómo debe actuar el bot?"
+   Agrupar preguntas del mismo req. Máximo 5 preguntas por mensaje para no saturar.
+
+3. Esperar respuesta del Dev.
+
+4. Con las respuestas del Dev:
+   - Actualizar internamente el JSON de análisis (`outputs/<CODIGO>_analisis.json`) con los valores proporcionados.
+   - Limpiar los gaps menores resueltos de cada req.
+   - Si el Dev responde "no sé" o "por definir" a alguna → mantener ese gap en el JSON y marcarlo como `estado: pendiente_ba`.
+
+5. Generar el `.toon` de prompts con la información actualizada.
+   → Guardar `outputs/<CODIGO>_prompts.toon`
+
+6. Mostrar **Resumen de Cambios para BA** al final del chat (ver formato abajo).
+   El Dev le pasa ese resumen a BA para que actualicen el PDD oficial.
+
+---
+
+### Camino 🟢 — PDD completo
+
+**Condición:** TODOS los requerimientos tienen:
+- `gaps.criticos: []`
+- `gaps.advertencias: []`
+- `informacion_faltante: []`
+
+**Acción:** Continuar directamente a generación de prompts sin interacción adicional.
+→ Activar skill de prompts según tecnología:
+   - `power_automate_desktop`  → **`generar-prompts-pad`**
+   - `power_automate_cloud`    → **`generar-prompts-cloud`**
+   - `power_automate_hybrid`   → **`hibrido`**
+   - `uipath`                  → **`generar-prompts-uipath`**
+   - `automation_anywhere`     → **`generar-prompts-aa`**
+   - Otros / no reconocido     → notificar al usuario y preguntar tecnología
+→ Guardar `outputs/<CODIGO>_prompts.toon`
+→ Mostrar **Resumen de Éxito** (ver formato abajo).
+
+---
+
+## Paso 6 — Mensajes al usuario
+
+### 🔴 Resumen Ejecutivo de Gaps (Camino rojo — STOP total)
+
+> ⚠ **Análisis completado — [CODIGO]** | [titulo del proyecto]
+> 📂 `outputs/[CODIGO]_analisis.json` generado | ⚙ Tecnología: [tech_label]
+>
+> 🔴 **El PDD requiere corrección profunda antes de continuar.**
+> Se detectaron gaps críticos en [M] de [Total] requerimientos. No se generaron prompts.
+>
+> ---
+> **REQUERIMIENTOS COMPLETOS** ([N] de [Total]):
+> ✅ [REQ_ID] — [nombre req]
+> (repetir por cada req sin gaps)
+>
+> **REQUERIMIENTOS CON GAPS CRÍTICOS** ([M] de [Total]):
+> *(Si varios reqs tienen el mismo gap, agruparlos: ✖ REQ_03, REQ_07 — Sistema no especificado)*
+>
+> ✖ **[REQ_ID] — [nombre req]**
+>   🚨 Críticos: [descripción exacta del gap crítico]
+>   ⚠ Advertencias: [descripción si aplica]
+>   🔎 Info faltante: [item si aplica]
+>
+> (repetir para cada req con gaps críticos)
+>
+> ---
+> ℹ **Acción requerida:** Corregir los gaps en el archivo `.toon` y volver a ejecutar **"analizar pdd"**.
+
+---
+
+### 🟡 Resumen de Cambios para BA (Camino amarillo — después del modo interactivo)
+
+> ✅ **Prompts generados con ajustes — [CODIGO]** | [titulo del proyecto]
+> 📄 `[CODIGO]_analisis.json` actualizado | 🚀 `[CODIGO]_prompts.toon` generado
+>
+> ---
+> **CAMBIOS APLICADOS EN EL JSON (para actualizar el PDD oficial):**
+>
+> 📝 **[REQ_ID] — [nombre req]:**
+>   - INPUT definido por Dev: `[valor respondido por el Dev]`
+>   - URL definida por Dev: `[valor respondido por el Dev]`
+>   (repetir por cada dato proporcionado)
+>
+> ⏳ **Pendientes para BA (Dev no pudo resolver):**
+>   - [REQ_ID] — [gap que quedó pendiente con estado: pendiente_ba]
+>
+> ---
+> ℹ **Instrucción para el Dev:** Comparte el bloque "Cambios Aplicados" con BA
+> para que actualicen el PDD oficial `.toon` con estos valores confirmados.
+
+---
+
+### 🟢 Resumen de Éxito (Camino verde — PDD completo)
+
+> ✅ **Proceso completado — [CODIGO]** | [titulo del proyecto]
 >
 > Archivos generados en `outputs/`:
-> - `[CODIGO]_analisis.json` — [N] requerimientos ([M] con sub-requerimientos, [K] con gaps críticos)
-> - `[CODIGO]_prompts.json` — [X] prompts en total ([Y] reqs sin prompts por gaps)
+> 📄 `[CODIGO]_analisis.json` — [N] requerimientos analizados
+> 🚀 `[CODIGO]_prompts.toon` — [X] prompts listos para Copilot
 >
-> **Tecnología clasificada:** [tech_label] — [razon breve]
+> **Tecnología:** [tech_label][, Proyecto híbrido — ver @nota_hibrido al inicio del .toon]
 >
-> [Si hay gaps críticos]:
-> ⚠ [N] requerimiento(s) con gaps críticos sin prompts:
-> [listar cada uno con el gap exacto]
->
-> [Si es híbrido]:
-> ℹ Proyecto híbrido. Ver campo `nota_hibrido` en el JSON de prompts para guía de implementación Cloud + Desktop.
+> **Cómo usar los prompts:**
+> 1. Abre `outputs/[CODIGO]_prompts.toon`
+> 2. Localiza el `@req` del requerimiento a implementar
+> 3. Lee `---instruccion---` → prepara la herramienta RPA correspondiente
+> 4. Copia `---prompt---` → pégalo en Copilot (Power Automate) o en el editor (UiPath/AA)
+> 5. Aplica `---nota_desarrollador---` para ajustes finales
 
 ---
 
@@ -205,4 +331,4 @@ Si alguna respuesta es NO → corregir antes de guardar.
 - Solo analiza documentos con estructura de PDD (.toon)
 - Nunca inventar requerimientos ni datos no presentes en el documento
 - No procesar consultas ajenas al dominio RPA/PDD
-- La clasificación de tipo (cloud/desktop/híbrido) aplica solo en Power Automate
+- La clasificación Cloud/Desktop/Híbrido aplica solo en Power Automate. Para UiPath todos los reqs tienen plataforma 'UiPath Workflow'. Para Automation Anywhere todos los reqs tienen plataforma 'AA Bot'.

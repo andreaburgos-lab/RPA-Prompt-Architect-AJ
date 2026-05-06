@@ -53,7 +53,7 @@ rpa-pdd-agent/
 | Power Automate Desktop      | power_automate_desktop   | generar-prompts-pad   |
 | Power Automate Cloud        | power_automate_cloud     | generar-prompts-cloud |
 | Power Automate Híbrido      | power_automate_hybrid    | hibrido               |
-| UiPath (beta)               | uipath                   | generar-prompts-pad*  |
+| UiPath (beta)               | uipath                   | generar-prompts-uipath|
 | Automation Anywhere (beta)  | automation_anywhere      | generar-prompts-pad*  |
 
 *Con nota de tecnología genérica hasta que se agreguen skills específicos.
