@@ -225,7 +225,8 @@ El Dev puede resolverlos con una pregunta puntual sin necesidad de reescribir el
 - `informacion_faltante: []`
 
 **Acción:** Continuar directamente a generación de prompts sin interacción adicional.
-→ Activar skill de prompts según tecnología:
+→ Activar skill **`buenas-practicas`** para cargar las reglas de la tecnología detectada.
+→ Activar skill de prompts según tecnología (con las reglas de buenas-practicas activas):
    - `power_automate_desktop`  → **`generar-prompts-pad`**
    - `power_automate_cloud`    → **`generar-prompts-cloud`**
    - `power_automate_hybrid`   → **`hibrido`**
