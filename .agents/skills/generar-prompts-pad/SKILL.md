@@ -9,6 +9,8 @@ description: |
 
 # Skill: Generar Prompts Power Automate Desktop (PAD)
 
+**REGLA MANDATARIA — Leer Buenas Practicas:** Antes de comenzar cualquier generacion de prompts, el agente DEBE leer el archivo `resources/BuenasPracticas.md` de esta skill y aplicar sus lineamientos.
+
 ## Principios de prompting para Copilot PAD — basados en documentacion oficial y foros
 
 **Principio 1 — Especificidad de parametros obligatorios:**
@@ -53,23 +55,22 @@ se DEBE dividir el proceso en subprompts (2a, 2b, 2c...) de la siguiente manera:
 - Prompt 2b: "Continuar escribiendo en la misma fila las columnas 11 a 20: [Col11], [Col12]..."
 NUNCA omitir campos del PDD por falta de espacio.
 
-**Principio 7 — Acciones soportadas y Complejidad UI:**
+**Principio 7 — Acciones soportadas por Copilot PAD:**
 Solo generar prompts para acciones que Copilot PAD puede crear:
   SOPORTADAS: Variables, Condiciones (If/Else), Bucles (For Each/Loop),
     Excel (Launch, Read, Write, Close), Archivos y Carpetas (Copy, Move, Delete, Get files),
     Outlook (Launch, Get Email Messages, Send Email), Web basico (Launch browser, navigate),
     Sistema (Run application, Get special folder, Wait), Texto (Trim, Split, Replace),
-    Fecha y hora, Matematicas.
+    Fecha y hora, Matematicas
   NO SOPORTADAS (solo nota_desarrollador): SAP GUI, UI Automation compleja con selectores
     XPath/CSS especificos, PowerShell scripts, grabacion de pantalla, Image Recognition.
     Para estas escribir en nota_desarrollador: "Esta accion requiere grabacion manual con
     el grabador de PAD. Copilot insertara un placeholder que debes completar."
 
 **Principio 8 — Granularidad y Cobertura (1 a N):**
-No limitarse a 4 prompts por requerimiento. Generar de 1 a N prompts segun sea necesario
-para cubrir entre el 80% y 100% de la funcionalidad descrita en el PDD/JSON.
-Si un requerimiento tiene 10 pasos logicos, generar 6-8 prompts si es necesario para
-mantener la precision y no perder detalles.
+No limitarse a X prompts por requerimiento. Generar de 1 a N prompts segun sea necesario
+para cubrir entre el 80% y 100% de la funcionalidad descrita en el PDD y JSON de analisis.
+Si un requerimiento tiene 10 pasos logicos en sus acciones del analisis y reglas de negocio , generar de 1,5,10 ...N prompts si es necesario para cubrir el porcentaje requerido y mantener la precision y no perder detalles.
 
 **Principio 9 — Bucles, Iteraciones y Archivos Adjuntos:**
 - Si el proceso implica procesar varios elementos (correos, archivos, filas), el prompt DEBE incluir explicitamente la accion "For Each" o "Loop".
@@ -130,6 +131,46 @@ Para cada correo en [LstCorreos]: extraer el cuerpo en [StrCuerpo] y guardar los
 **Acciones en Excel / Sistemas:**
 "Abrir el archivo Excel [Str{NombreReq}Ruta]. En la hoja [{NombreHoja}], escribir en la siguiente fila: {Col1} <- [Var1], {Col2} <- [Var2]... {Seguir listando TODOS los campos del PDD}."
 
+**Para SharePoint (descarga via UI de navegador):**
+"Abrir navegador Chrome y navegar a [{https://sharepoint-url-aqui}].
+Esperar al contenido de la pagina con 'Esperar al contenido de la ventana'.
+Localizar el archivo [{NombreArchivo}.xlsx] en la carpeta [{rutaCarpetaSharePoint}].
+Hacer clic en Descargar y guardar en [Str{NombreReq}Ruta]."
+
+nota_desarrollador: "ACCION UI sobre SharePoint web: usar grabador de PAD para selectores del
+navegador. Ruta en SharePoint: [{rutaCarpetaSharePoint}]. Si hay API de SharePoint disponible
+considerar migracion a Cloud Flow para este req."
+
+"Usar la accion Get Email Messages de Outlook con filtro de asunto que contenga
+'{AsuntoFiltroDelPDD}'. Guardar los correos en [Lst{NombreReq}Correos].
+Para cada correo en [Lst{NombreReq}Correos], extraer: asunto en [StrAsunto],
+remitente en [StrRemitente], cuerpo en [StrCuerpo], adjuntos en [Lst{NombreReq}Adjuntos]."
+
+**Para UI de sistema legacy (JDE, SAP, SEADEX, SIESA, Oracle, AS400):**
+"Abrir navegador Chrome y navegar a [{https://url-del-sistema-aqui}].
+Esperar a que cargue la pagina de inicio de sesion usando la accion
+'Esperar al contenido de la ventana'.
+Hacer clic en el campo usuario e ingresar [StrUsuario].
+Hacer clic en el campo contrasena e ingresar [StrContrasena].
+Hacer clic en el boton Ingresar."
+
+nota_desarrollador: "ACCION UI DETECTADA: Copilot insertara un placeholder de grabacion.
+Usar el grabador de PAD para capturar los selectores reales de {sistema}.
+Habilitar 'Simular accion' en cada elemento UI cuando el control lo permita.
+Nombrar cada ventana como '{Sistema} - {descripcion}' y cada elemento por tipo
+(cuadro de texto, boton, lista desplegable). URL del sistema: [{https://url-aqui}]."
+
+**Para Outlook (envio):**
+"Usar la accion Launch Outlook para abrir la aplicacion.
+Crear un borrador de correo con Send Email: destinatarios en [StrDestinatarios],
+asunto '{AsuntoExactoDelPDD}', cuerpo '{CuerpoDelTemplate}'.
+{Si tiene adjunto: Adjuntar el archivo [Str{NombreReq}Ruta].}"
+
+nota_desarrollador: "Segun politica Beecker, los correos creados por robots deben guardarse
+como borradores para revision humana si contienen informacion sensible. Toda la info del
+correo (asunto, cuerpo, destinatarios) debe ser parametrizable, no hardcodeada."
+
+
 ### Paso 3: Manejo de Errores y Excepciones
 
 Generar prompts especificos para las excepciones del PDD. Si son muchas, agrupar o separar.
@@ -137,7 +178,7 @@ Generar prompts especificos para las excepciones del PDD. Si son muchas, agrupar
 
 ### Paso 4: Cierre y Logs (Se pueden consolidar si son pasos breves)
 
-"Escribir en el log de ejecucion [{RutaLog}]: Fecha actual, Modulo [StrModulo], Proceso '{NombreReq}', Estado [StrEstadoEjecucion]. Cerrar todas las aplicaciones y archivos abiertos."
+"Escribir en el log de ejecucion [{RutaLog} o [rutaLog\aqui\va\la\ruta]\{NombreArchivoLog}.xlsx]: Fecha actual, Modulo [StrModulo], Proceso '{NombreReq}', Estado [StrEstadoEjecucion]. Cerrar todas las aplicaciones y archivos abiertos."
 
 nota_desarrollador: "Configurar la ruta del archivo de log como parametro global al inicio
 del flow principal, no como hardcode aqui. Columnas del log: Fecha, Modulo, Proceso, Estado.
