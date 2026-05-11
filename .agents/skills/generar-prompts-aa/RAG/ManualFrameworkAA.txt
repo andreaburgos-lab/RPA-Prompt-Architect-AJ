@@ -1,0 +1,72 @@
+# Resumen Técnico: Manual Framework Automation Anywhere (V.02)
+
+Este documento sintetiza las directrices para el desarrollo de robots productivos, centrándose exclusivamente en la **arquitectura, operación y estandarización** del sistema.
+
+## 1. Concepto y Objetivos del Framework
+Es una estructura reutilizable y estandarizada que facilita la **modularización, escalabilidad y mantenimiento**. Su fin es permitir que los procesos crezcan sin perder el control técnico.
+
+---
+
+## 2. Componentes y Módulos Principales
+
+| Componente | Descripción y Funcionalidad |
+| :--- | :--- |
+| **Config File** | Centraliza rutas, URLs y parámetros de entorno. Se recomienda en ruta local o compartida para cambios rápidos sin afectar el Control Room. |
+| **ReadConfig** | Lee hojas `Settings`, `Constants` y `Assets`. Almacena datos en el diccionario `Config`. Reemplaza etiquetas dinámicas como `{user}` y `{year}`. |
+| **Create Bot Folders** | Genera la jerarquía: `Log`, `Data`, `Screenshot`, `Input`, `Output` y `Temp` basándose en el *ProcessID*. |
+| **Prepare Environment** | Limpia el entorno cerrando navegadores y terminando procesos definidos en la clave `Taskkill`. |
+| **Get Credentials** | Extrae credenciales del Control Room vía *Credential Utilities* y las integra al diccionario `Config` (hoja `Assets`). |
+
+---
+
+## 3. Gestión de Transacciones (Get Transaction Data)
+El flujo se define mediante la clave `TypeTransactionData`:
+
+* **Transactional (Excel):** Itera sobre cada fila de un archivo. Cada fila es un `TransactionItem`.
+* **Lineal:** Camino de decisiones único para procesos sin múltiples ítems independientes.
+
+---
+
+## 4. Procesamiento y Manejo de Errores (Process)
+
+### Lógica de Ejecución
+* **Reintentos:** En flujos transaccionales, se permiten hasta **3 reintentos** ante fallas de sistema.
+* **Variables de Entrada:** Los módulos deben recibir obligatoriamente:
+    * `In_Config` (Diccionario).
+    * `In_Transaction` (Fila actual).
+    * `io_ErrorMessage` e `io_ErrorLineNumber` (Captura de fallos).
+
+### Error Handler
+Cada fase está protegida por un bloque **Try-Catch**. Ante un error:
+1. Captura la excepción.
+2. Registra el fallo en el Log.
+3. Captura **Screenshot** (si el nivel es "Error").
+4. Determina si reintenta o termina la ejecución.
+
+---
+
+## 5. Finalización y Limpieza (End Process)
+
+1.  **End Process:** Tareas post-procesamiento (correos finales, cierre de sesión o borrado de temporales).
+2.  **Device Cleanup:** Borrado de logs y capturas antiguas según el tiempo definido en `TimeStorage`.
+3.  **Clean Environment:** Cierre final de apps para dejar la máquina lista para el siguiente bot.
+
+---
+
+## 6. Módulos Reutilizables (Reusables)
+
+### Task SendMail
+Gestiona correos parametrizados para 4 escenarios:
+* Inicio
+* Finalización
+* Seguimiento (*Follow-up*)
+* Error (Se recomienda que los destinatarios del Catch general sean variables globales por si el Config falla).
+
+### Task AddToLog
+Genera un archivo **CSV diario**. Captura automáticamente:
+* Hora exacta.
+* Nivel de log (Info/Trace/Error).
+* Módulo origen.
+* Nombre de la captura de pantalla en caso de error.
+
+---

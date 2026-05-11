@@ -39,11 +39,11 @@ Autopilot NO puede acceder a:
 
 ## Principios de prompting para Autopilot — basados en documentacion oficial y comunidad
 
-**Principio 1 — Acciones pequenas y concretas:**
+**Principio 1 — Acciones pequenas y concretas (Granularidad 1 a N):**
 Autopilot genera secuencias mas precisas cuando se le dan pasos concretos y separados.
-En lugar de describir el proceso completo en un solo prompt, dividirlo en prompts
-secuenciales por agrupacion logica de actividades (inicializacion, logica principal,
-manejo de errores, log). Cada prompt debe cubrir entre 3 y 8 actividades como maximo.
+No limitarse a 4 prompts. Generar de 1 a N prompts segun sea necesario para cubrir
+entre el 80% y 100% de la funcionalidad. Cada prompt debe cubrir entre 3 y 8 actividades.
+Si un requerimiento es complejo, dividirlo en tantos prompts como sea necesario para no perder detalle.
 
 **Principio 2 — Voz activa y verbos de accion:**
 Usar verbos de accion directos que correspondan a actividades reales de UiPath:
@@ -118,15 +118,14 @@ ya usadas en el workflow actual se mantiene entre prompts del mismo archivo XAML
 En Studio Web, el prompt se ingresa en la barra de busqueda > Generate with Autopilot,
 o desde Actions > Annotate with Autopilot en cualquier Sequence/Scope.
 
-**Principio 10 — Longitud optima de prompt y division en sub-prompts:**
-No existe un limite de caracteres documentado oficialmente para el prompt de Autopilot
-en Studio. Sin embargo, la documentacion y la comunidad recomienda:
-  - Prompts CORTOS y ESPECIFICOS generan mejores resultados que prompts largos
-  - Si el prompt describe mas de 8-10 actividades, dividirlo en sub-prompts
-  - Para listas largas de columnas que no caben en un prompt comodo, usar Prompt 2b
-  - En Studio Web el area de texto acepta texto libre sin limite conocido documentado
-  - Apuntar a prompts de entre 200 y 600 palabras para cobertura optima por pasada
-  - Prompts muy cortos (<50 palabras) pueden resultar en workflows incompletos
+**Principio 10 — Longitud optima de prompt y Cobertura de Campos:**
+No existe un limite de caracteres documentado oficialmente, pero se recomienda:
+  - Prompts CORTOS y ESPECIFICOS generan mejores resultados que prompts largos.
+  - Si el PDD lista muchos campos (ej: 20+ campos), NOMBRARLOS TODOS. Si no caben,
+    usar sub-prompts (2a, 2b...).
+  - Apuntar a prompts de entre 200 y 600 palabras para cobertura optima.
+  - El prompt DEBE incluir explicitamente "For Each" si hay iteracion de correos/filas.
+  - Diferenciar claramente entre extraer texto de un adjunto y simplemente guardarlo.
 
 **Principio 11 — Lo que Autopilot NO puede generar (solo nota_desarrollador):**
 Las siguientes acciones requieren intervencion manual del desarrollador:
@@ -152,82 +151,35 @@ en el mismo archivo XAML. Aprovechar esto:
 
 ## Estructura de prompts por requerimiento
 
-Para cada requerimiento generar EN ESTE ORDEN:
+Para cada requerimiento generar una secuencia de 1 a N prompts asegurando cobertura total (80-100%):
 
-### Prompt 1 — Inicializacion de variables y configuracion
+### Paso 1: Inicializacion de variables y configuracion
 
 Establece TODAS las variables del workflow y la configuracion inicial.
-Autopilot las recuerda en prompts siguientes del mismo archivo XAML.
-
-Estructura del prompt:
 "Create string variable str_[NombreReq]FilePath with value 'C:\RPA\[Proyecto]\[Archivo.xlsx]'.
 Create string variable str_Status with empty value.
 Create string variable str_Module with value '[NombreWorkflow]'.
 [Si hay DataTable: Create DataTable variable dt_[NombreReq].]
-[Variables adicionales especificas del req segun PDD.]
 Add a Log Message activity with level Information and message 'Starting [NombreReq] workflow'."
 
-Reglas:
-- str_[NombreReq]FilePath: si el PDD define el nombre del archivo, usarlo directamente.
-  Si no: usar placeholder C:\RPA\[NombreProyecto]\[NombreReq].xlsx
-- str_Status: siempre presente, para log de estado al final
-- str_Module: siempre presente con el nombre exacto del workflow para trazabilidad
-- Variables adicionales: una por cada input diferenciado del req (str_Empresa, int_MaxFilas)
-- Si hay DataTable para datos: dt_[NombreReq]
-- Si hay asset de Orchestrator: indicar en instruccion_previa que debe existir
+### Paso 2: Logica de Proceso (1 a N prompts)
 
-instruccion_previa (Studio Desktop): "ANTES DE PEGAR ESTE PROMPT:
-1. En Studio Desktop, abrir o crear el archivo XAML '[NombreWorkflow].xaml'.
-2. Agregar una Sequence vacia al canvas. Clic derecho > Add Annotation.
-3. Activar la anotacion y pegar el prompt. Hacer clic en Generate.
-4. PRERREQUISITOS que deben existir antes de ejecutar:
-   [listar: assets en Orchestrator, queues, elementos en OR, rutas de archivo]
-5. Nomenclatura de variables: prefijo de tipo Beecker (str_, dt_, int_, bln_, lst_)."
+**Manejo de Iteraciones:**
+"Get Mail Messages from Outlook. For each email in the list: save attachments to 'C:\RPA\Adjuntos\' and store subject in str_Asunto."
 
-instruccion_previa (Studio Web): "ANTES DE PEGAR ESTE PROMPT:
-1. En Studio Web, abrir el workflow [NombreWorkflow].
-2. En la barra de busqueda de actividades, escribir el prompt y seleccionar
-   'Generate with Autopilot', o bien agregar una Sequence y usar
-   Actions > Annotate with Autopilot.
-3. PRERREQUISITOS: [listar assets, queues, OR elements, rutas]."
+**Extraccion y Mapeo Masivo (REGLA DE ORO):**
+"Read Range from Excel file. The DataTable contains the following columns: {Col1}, {Col2}, {Col3}, {Col4}... {NOMBRAR TODAS LAS COLUMNAS DEL PDD}."
 
-### Prompt 2 — Logica principal (especifica por tipo de sistema/actividad)
+**UI Automation con Object Repository:**
+"Use Browser activity. Click on [NombreElemento_EnOR], type str_Valor into [NombreCampo_EnOR]... {Referenciar nombres exactos del OR}."
 
-Describe la accion ESPECIFICA del req. Incluir: sistema, archivo con ruta,
-hoja si aplica, columnas, condiciones y variables por nombre.
+### Paso 3: Manejo de errores y excepciones
 
-**Para Excel (lectura):**
-"Open Excel file 'C:\RPA\[Proyecto]\[Archivo.xlsx]' using UiPath.Excel.Activities.
-Read Range from sheet '[NombreHoja]' and store result in dt_[NombreReq].
-[Si hay columnas especificas: The DataTable contains columns: [Col1], [Col2], [Col3].]
-Close the Excel file."
+"Add Try Catch block around previous activities. In Catch section: Assign str_Status = 'Error', Log message '[MensajeExactoPDD]', and send email notification."
 
-nota_desarrollador: "Verificar que la ruta existe en el robot. Hoja: [NombreHoja].
-[Si hay mas columnas que no cupieron: ver Prompt 2b para columnas restantes.]"
+### Paso 4: Log de ejecucion y cierre
 
-**Para Excel (escritura):**
-"Open Excel file 'C:\RPA\[Proyecto]\[Archivo.xlsx]' using UiPath.Excel.Activities.
-Find the first empty row in sheet '[NombreHoja]'.
-Write the following values to that row:
-column [Col1] = str_[Var1], column [Col2] = str_[Var2], column [Col3] = str_[Var3].
-Save and close the Excel file."
-
-**Para Orchestrator Asset (lectura de credenciales):**
-"Get Credential asset named '[NombreAsset]' from Orchestrator folder '[NombreCarpeta]'.
-Store username in str_Usuario and password in str_Contrasena.
-Log message with level Information: 'Credentials retrieved successfully'."
-
-nota_desarrollador: "IMPORTANTE: El asset '[NombreAsset]' debe existir en Orchestrator
-en la carpeta '[NombreCarpeta]' ANTES de ejecutar este workflow. Tipo: Credential."
-
-**Para Orchestrator Queue:**
-"Add Queue Item to queue '[NombreQueue]' in Orchestrator folder '[NombreCarpeta]'.
-Set specific content with: [Campo1] = [valor1], [Campo2] = [valor2].
-[O si es lectura:] Get Transaction Item from queue '[NombreQueue]' in folder
-'[NombreCarpeta]' and store in variable queueItem."
-
-nota_desarrollador: "La queue '[NombreQueue]' debe existir en Orchestrator en la carpeta
-'[NombreCarpeta]' antes de ejecutar. Autopilot no puede crear queues dinamicamente."
+"Assign str_Status = 'Success'. Write row in Excel log with: current date, str_Module, '{NombreReq}', str_Status. Close all applications."
 
 **Para UI Automation - Web (browser):**
 "Use Browser activity to open '[https://url-del-sistema-aqui]' using Chrome.

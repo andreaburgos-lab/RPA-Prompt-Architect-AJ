@@ -1,0 +1,78 @@
+El siguiente es un resumen de las buenas prácticas esenciales del documento para el desarrollo de robots productivos y de alta calidad en Automation Anywhere, enfocado en la **Mantenibilidad, Legibilidad, Confiabilidad y Eficiencia**:
+
+### I. Principios Fundamentales
+
+Las buenas prácticas buscan verificar y aumentar la calidad del código mediante la detección temprana de errores, la implementación de estándares y la discusión de alternativas más eficientes.
+
+Los preceptos clave a evaluar son:
+
+  * **Mantenibilidad:** Facilidad para extender, modificar y corregir el bot.
+  * **Legibilidad:** Código con formato, comentarios, anotaciones y nombres significativos (workflows, actividades, variables).
+  * **Confiabilidad:** Habilidad del bot para realizar sus funciones requeridas bajo condiciones específicas, incluyendo el manejo de excepciones y reporte de errores.
+  * **Eficiencia:** Lograr el objetivo en el tiempo marcado y sin gastar recursos innecesarios.
+
+### II. Reglas Generales y Arquitectura
+
+| Tema                       | Buena Práctica                                                                                                                                                                                                                 |
+| :------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Diseño**                 | Usar módulos para pruebas independientes y manejar interacciones o procesamientos en *background*.                                                                                                                             |
+| **Estructura de Carpetas** | Crear subcarpetas para `Framework` (módulos AA, excepto Main), `Process` (taskbots del proyecto), y `Data` (archivos Configs, scripts).                                                                                        |
+| **Framework**              | Usar un Framework (como BeeFramework) para consistencia, disminuir el tiempo de desarrollo y asegurar buenas prácticas. El taskbot principal (`FrameworkV3`) debe manejar las etapas Init, Get Transaction Data y End Process. |
+| **Configuración**          | El archivo de configuración es primordial para evitar el código duro. Debe tener dos hojas: `Settings` (datos variables) y `Constants` (constantes).                                                                           |
+| **Rutas Variables**        | Usar variables para rutas que requieran el nombre de usuario de la máquina, como `C:\Users\{Usuario}\Documents`.                                                                                                               |
+| **Archivos en Azure**      | Subir los archivos extraídos del Zip del Control Room al repositorio de AzureDevOps para facilitar la revisión de código.                                                                                                      |
+| **Pruebas y Producción**   | Remover todos los elementos generados para pruebas (unitarias o de testing) antes de pasar a producción.                                                                                                                       |
+| **Bots Desatendidos**      | Evitar el uso de actividades que requieran interacción humana, como `Message Box` o `Prompt`.                                                                                                                                  |
+| **Análisis de Código**     | Usar la herramienta *Code Analysis Result (Assistant)* y procurar el estatus “No violations”.                                                                                                                                  |
+
+### III. Variables
+
+| Tema                          | Buena Práctica                                                                                                                                                                                |
+| :---------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Nomenclatura General**      | Usar el estilo UpperCamelCase y nombres significativos. Evitar caracteres especiales.                                                                                                         |
+| **Prefijos**                  | **Entrada/Salida:** Usar prefijos en minúscula: `in_`, `out_`, `io_`. **Dinámica:** Usar el prefijo `dt_`.                                                                                    |
+| **Ventanas/Browser**          | El nombre debe iniciar con la aplicación que interactúa, seguido de un nombre descriptivo en UpperCamelCase. Usar comodines (`*`) en la propiedad *Título de la ventana* para mayor robustez. |
+| **Código Duro (Hardcode)**    | **Evitar** establecer cualquier tipo de dato o valor de forma fija o manual, incluyendo contraseñas, retrasos, rutas, nombres de archivos y credenciales.                                     |
+| **Constantes**                | Las constantes (valores no modificados) deben obtener su valor desde el archivo `config`.                                                                                                     |
+| **Seguridad de Credenciales** | Todos los IDs de usuario y contraseñas deben almacenarse en la **Bóveda de Credenciales** del Control Room.                                                                                   |
+| **Variables No Utilizadas**   | Eliminar todas las variables no utilizadas en el *taskbot* para mejorar la comprensión del proyecto.                                                                                          |
+
+### IV. Taskbot y Estructura de Código
+
+| Tema                              | Buena Práctica                                                                                                                                                                                        |
+| :-------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Nomenclatura Taskbot**          | Iniciar con un prefijo que sea la aplicación principal o portal (`App_NombreTaskbot`). Usar `General_` si no hay aplicación principal.                                                                |
+| **Descripciones y Steps**         | Agregar una breve descripción textual al inicio de cada taskbot sobre su propósito. Encapsular funcionalidades con acciones **Step** con nombres significativos.                                      |
+| **Comentarios**                   | Documentar el código a lo largo del taskbot; la cantidad de comentarios debe ser aproximadamente el **30%** de las líneas de código utilizadas (sin contar Steps, AddToLog, Error handler, Comments). |
+| **Trazabilidad**                  | Añadir el ID de requerimiento (obtenido de DFR, DAT o AzureDevOps) a los taskbots correspondientes como un **Step** para CMMI.                                                                        |
+| **Flujo Saturado**                | Limitar a un máximo de **180 líneas de código** por taskbot.                                                                                                                                          |
+| **Anidamiento**                   | Limitar las estructuras profundamente anidadas a un máximo de **7 niveles** y las actividades `If` anidadas a un máximo de **tres**.                                                                  |
+| **If-Then**                       | Definir la condición para que el código principal pase por la rama “If” (verdadera), evitando bloques "If" vacíos.                                                                                    |
+| **Acciones Vacías/Inhabilitadas** | Eliminar acciones inhabilitadas o vacías del flujo de trabajo.                                                                                                                                        |
+
+### V. Log, Manejo de Errores y Optimización
+
+| Tema                        | Buena Práctica                                                                                                                                                                                                                                                                    |
+| :-------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Error Handler (General)** | Cada taskbot debe tener un `Error handler: Try` que abarque la totalidad del código, con su respectivo `Error handler: Catch`.                                                                                                                                                    |
+| **Error Handler (Catch)**   | Dentro de `Catch`, usar variables para almacenar la *Exception message* y *Line Number*, y usar un `AddToLog` con nivel *Error* que registre estos valores.                                                                                                                       |
+| **Uso de AddToLog**         | Usar el taskbot reutilizable `AddToLog` al inicio y final de cada módulo y en puntos importantes (interacción con aplicaciones externas, subida/descarga de archivos, actividad *try catch*, etc.). La cantidad de `AddToLog` debe ser mínimo el **20%** de las líneas de código. |
+| **Niveles de Log**          | Asignar el nivel correcto: *Error* (errores fatales), *Info* (progreso, inicio/cierre de módulos), *Trace* (rastreo específico de código).                                                                                                                                        |
+| **Actividad Delay**         | Limitar su uso al mínimo. Priorizar acciones como `Wait for condition`, `Wait for screen change`, o `Wait for window`. Si es necesario, el valor del tiempo debe ser una variable traída del archivo `config`.                                                                    |
+| **Acción Loop**             | Agregar un `Label` descriptivo a cada `Loop`, `Continue` o `Break`. Usar una variable de control para reintentos obtenida del `Config`.                                                                                                                                           |
+| **Cierre de Programas**     | Para "matar" un proceso (Kill), usar la acción `Application: Open program/file` con la configuración `taskkill` y el parámetro que incluye el nombre del proceso y el nombre de usuario de la máquina. El nombre de la aplicación debe ser parametrizable.                        |
+| **Scripts**                 | Evitar el uso excesivo. Los valores ingresados deben ser dinámicos y deben incluir un manejo de errores controlable desde Automation Anywhere.                                                                                                                                    |
+
+### VI. Interacción con Aplicaciones
+
+| Tema                 | Buena Práctica                                                                                                                                                                                                                            |
+| :------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Navegadores**      | Usar la actividad `Browser: Open` como la forma preferida de trabajar con navegadores.                                                                                                                                                    |
+| **Recorder**         | Usar la opción *Cambiar tamaño de ventana* (*Size Window*) y priorizar la acción **Click** sobre *Left click*.                                                                                                                            |
+| **Set Text**         | Al usar `Set text`, establecer la propiedad *Time between keystrokes (milliseconds)* en **40ms**.                                                                                                                                         |
+| **Excel**            | Evitar cualquier uso de actividades `Recorder` o `Simulate keystrokes`. Utilizar las actividades designadas de la integración de Excel o macros.                                                                                          |
+| **Propiedades HTML** | No usar `HTML Href` y `HTML FrameSrc` por ser poco confiables; si son requeridas, modificar su valor usando el comodín (`*`).                                                                                                             |
+| **SAP**              | Priorizar la acción **SAP: Click** y respetar la jerarquía de acciones si la paquetería SAP no ofrece la acción requerida: Paquetería SAP \> Recorder: Capture \> Scripts.                                                                |
+| **Sesiones**         | Dar un nombre descriptivo a la sesión y **cerrarla en el mismo taskbot** en el que se abre.                                                                                                                                               |
+| **Envío de Correos** | Los correos electrónicos creados por robots deben guardarse como **borradores** para revisión humana, a menos que sean genéricos y sin información sensible. Toda la información (asunto, cuerpo, destinatarios) debe ser parametrizable. |
+

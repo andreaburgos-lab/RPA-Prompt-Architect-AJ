@@ -66,10 +66,20 @@ Si el prompt cubrio solo X, ejecutar Prompt 3b."
   PROHIBIDO: dejar nombre default sin modificar, acentos, caracteres especiales en nombres
   33% minimo de acciones deben tener nota/descripcion (porcentaje minimo Beecker)
 
-**Principio 10 — Correos y politica Beecker:**
-  Correos con informacion sensible -> guardar como borrador para revision humana
-  Toda informacion del correo parametrizable: asunto, cuerpo, destinatarios
-  PROHIBIDO hardcode de correos en acciones
+**Principio 11 — Granularidad y Cobertura (1 a N):**
+No limitarse a 4 prompts por requerimiento. Generar de 1 a N prompts segun sea necesario
+para cubrir entre el 80% y 100% de la funcionalidad descrita en el PDD/JSON.
+Si un requerimiento tiene 10 pasos logicos, generar 6-8 prompts si es necesario para
+mantener la precision y no perder detalles.
+
+**Principio 12 — Bucles, Iteraciones y Campos Masivos:**
+- Si el proceso implica procesar varios elementos (correos, filas de Excel), el prompt DEBE incluir explicitamente la accion "Aplicar a cada uno" (Apply to each).
+- Si el PDD lista muchos campos (ej: 20+ campos de una factura), NOMBRARLOS TODOS en el prompt. Si no caben en 2000 chars, dividir en subprompts (3a, 3b...).
+- Diferenciar claramente entre extraer datos del cuerpo de un correo y guardar sus adjuntos.
+
+**Principio 13 — Validaciones Robustas:**
+Evitar validaciones basadas UNICAMENTE en comparacion de texto literal si el PDD sugiere
+patrones. Ej: Validar longitud de cadena o presencia de palabras clave combinadas.
 
 ---
 
@@ -111,101 +121,37 @@ Si el prompt cubrio solo X, ejecutar Prompt 3b."
 
 ## Estructura de prompts por requerimiento
 
-Para cada req con puede_generar = true, generar EN ESTE ORDEN:
+Para cada req con puede_generar = true, generar una secuencia de 1 a N prompts
+asegurando cobertura total (80-100%):
 
-### Prompt 1 — Trigger (SIEMPRE solo, nunca con acciones)
+### Paso 1: Trigger (Prompt independiente)
 
-Formato: "Crear un Cloud Flow automatizado con el trigger {TriggerExacto} del conector
+"Crear un Cloud Flow automatizado con el trigger {TriggerExacto} del conector
 {ConectorExacto}{, filtrado por {condicion_exacta_del_PDD} si aplica}."
 
-Mapeo sistema -> trigger:
-  Outlook/correo:   Cuando llega un nuevo correo electronico (V3) del conector Office 365 Outlook
-  SharePoint:       Cuando se crea o modifica un elemento del conector SharePoint
-  OneDrive:         Cuando se crea un archivo del conector OneDrive for Business
-  Forms:            Cuando se envia una nueva respuesta del conector Microsoft Forms
-  Sin trigger claro: trigger manual (Instant Flow - se ejecuta manualmente)
+### Paso 2: Inicializacion de Variables
 
-instruccion_previa: "Pegar este prompt en el campo 'Crear tu automatizacion con Copilot'
-en la pagina de inicio de Power Automate (make.powerautomate.com > + Crear > Con Copilot).
-Agregar descripcion al flujo con: proposito, condiciones previas, referencia al req {req.id}."
-
-nota_desarrollador: "Conector: {ConectorExacto}. Configurar filtros del trigger en el panel
-de diseno despues de generarlo (ej: filtro de asunto, sitio de SharePoint, carpeta)."
-
-### Prompt 2 — Inicializar variables (max 5 en ramas paralelas por Beecker)
-
-Estructura: "Agregar la accion Inicializar variable {N} veces usando ramas paralelas:
+"Agregar la accion Inicializar variable {N} veces usando ramas paralelas:
 la primera llamada Str{NombreVar1} de tipo texto con valor '{valorInicial}',
-la segunda llamada Str{NombreVar2} de tipo texto con valor vacio,
-{continuar para cada variable del req}."
+{continuar para cada variable del req incluyendo StrEstadoEjecucion y StrModulo}."
 
-Variables minimas siempre presentes:
-  StrEstadoEjecucion: estado del proceso (Exito/Error)
-  StrModulo: nombre del flujo para logs, valor = '{NombreFlowExacto}'
-  Variables especificas del req segun sus inputs (ej: StrCuentaCorriente, StrEmpresa)
-  Si hay listas: ArrResultados o ArrNombreContenido
+### Paso 3: Logica de Proceso (1 a N prompts)
 
-instruccion_previa: "Pegar en el panel Copilot dentro del diseñador, despues de confirmar el trigger.
-Seleccionar 'Agregar un paso' en el panel Copilot del diseñador."
+**Manejo de Iteraciones:**
+"Agregar la accion Aplicar a cada uno (Apply to each) para iterar sobre [Lista/Adjuntos].
+Dentro del bucle: {Acciones de extraccion o procesamiento}."
 
-nota_desarrollador: "Maximo 5 ramas paralelas recomendado por Beecker para conservar
-legibilidad. Si hay mas de 5 variables, dividir en dos acciones de ramas paralelas.
-Tipos: texto (String), numero entero (Int), booleano (Bln), array (Arr), objeto (Obj)."
+**Extraccion y Mapeo de Campos (REGLA DE ORO):**
+"Usando el conector {Conector}, mapear los campos: '{Campo1}' <- {Origen1}, '{Campo2}' <- {Origen2},
+'{Campo3}' <- {Origen3}... {NOMBRAR TODOS LOS CAMPOS DEL PDD. Si no caben, dividir en Prompt 3b}."
 
-### Prompt 3 — Accion principal (especifica por tipo de sistema)
+**Diferenciacion de Adjuntos:**
+"Usando el conector Outlook, obtener adjuntos del correo. Para cada adjunto: usar el conector SharePoint
+para la accion Crear archivo en la carpeta '{Ruta}'."
 
-El prompt describe la accion ESPECIFICA del req. Incluir conector exacto, nombre de tabla,
-sitio de SharePoint, carpeta, y columnas si el PDD las lista.
+### Paso 4: Manejo de Errores y Logs
 
-**Para SharePoint (obtener archivo):**
-"Agregar la accion Obtener contenido del archivo del conector SharePoint apuntando al
-sitio [{https://empresa.sharepoint.com/sites/NombreSitio}], carpeta
-'[{/Documentos/RutaCarpeta}]', archivo '{NombreArchivo.xlsx}'.
-Luego agregar la accion Establecer variable para guardar el contenido en StrArchivoContenido."
-
-**Para SharePoint (crear/actualizar elemento con columnas):**
-"Agregar la accion Crear elemento del conector SharePoint en el sitio
-[{https://empresa.sharepoint.com/sites/NombreSitio}], lista '{NombreLista}'.
-Mapear los campos: columna '{Campo1}' <- {Origen1}, columna '{Campo2}' <- {Origen2},
-columna '{Campo3}' <- {Origen3}. {Si hay mas columnas: ver Prompt 3b.}"
-
-nota_desarrollador: "Verificar que se mapearon los N campos del req:
-{lista COMPLETA de campos del PDD}. Si el prompt cubrio solo X, ejecutar Prompt 3b."
-
-**Para Excel Online (leer tabla):**
-"Agregar la accion Listar las filas presentes en una tabla del conector
-Excel Online (Business). Seleccionar la ubicacion [{OneDrive/SharePoint}],
-archivo '{NombreArchivo.xlsx}', hoja '{NombreHoja}', tabla '{NombreTabla}'.
-Guardar el resultado en la variable ArrFilas."
-
-**Para Excel Online (escribir fila con columnas especificas):**
-"Agregar la accion Agregar una fila a una tabla del conector Excel Online (Business).
-Archivo '{NombreArchivo.xlsx}', tabla '{NombreTabla}'.
-Columnas a poblar: '{ColA}' <- StrValorA, '{ColB}' <- StrValorB, '{ColC}' <- StrValorC.
-{Si hay mas columnas: ver Prompt 3b.}"
-
-**Para correo (extraccion de campos del cuerpo):**
-"Agregar la accion Obtener adjuntos (V2) del conector Office 365 Outlook usando el
-Id de mensaje del trigger. Guardar resultado en ArrAdjuntos.
-Agregar la accion Establecer variable para guardar el asunto del correo
-en la variable StrCorreoAsunto y el remitente en StrCorreoRemitente."
-
-**Para condicion de validacion:**
-"Agregar la accion Condicion renombrada como '{CondicionDescriptiva}' que verifique
-si {condicion_exacta_del_PDD}. En la rama Verdadero: {accion_rama_true}.
-En la rama Falso: {accion_rama_false o log de error}."
-
-nota: El bloque True debe tener la accion principal. PROHIBIDO bloque True vacio (regla Beecker).
-
-### Prompt 4 — Manejo de errores (si el req tiene excepciones)
-
-"Agregar la accion Ambito renombrada como '{NombreSubflow}_ManejadorErrores' para
-encapsular las acciones anteriores. Agregar rama paralela despues del ambito.
-En la rama paralela, configurar la accion Condicion con RunAfter para que se
-ejecute si el ambito falla. En la rama Verdadero de la condicion: agregar la
-accion Enviar un correo electronico (V2) del conector Office 365 Outlook con
-asunto '{AsuntoExactoDelPDD}' y establecer la variable StrEstadoEjecucion en 'Error'.
-Agregar la accion Terminar configurada como Fallido."
+"Agregar Ambito '{Nombre}_ManejadorErrores'. Si falla: enviar correo '{Asunto}' y establecer StrEstadoEjecucion en 'Error'. Finalizar con Terminar Fallido."
 
 nota_desarrollador: "Excepciones del req:
 {listar TODAS las excepciones: condicion -> accion completa -> log}.

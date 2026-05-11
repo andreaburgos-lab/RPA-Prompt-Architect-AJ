@@ -45,25 +45,43 @@ Si el PDD no define una ruta, URL o nombre de archivo, usar placeholder descript
   Columna sin nombre: [NombreColumna]
 NUNCA dejar el parametro en blanco ni usar texto vago como "el archivo".
 
-**Principio 6 — Especificidad de columnas y campos:**
-Si el PDD lista columnas a leer o escribir, nombrarlas TODAS en el prompt.
-Si no caben en 500 chars, dividir en subprompts con numeracion (2a, 2b, etc.)
-y en nota_desarrollador indicar: "Verificar que se crearon las N columnas:
-[Col1], [Col2]... Si el prompt cubrio solo X, ejecutar el subprompt siguiente."
+**Principio 6 — Cobertura Total de Columnas y Campos (REGLA DE ORO):**
+Si el PDD lista columnas a leer o escribir, NOMBRARLAS TODAS en el prompt sin excepcion.
+Si hay 20 columnas, las 20 deben estar en el prompt. Si no caben en 500 chars (limite de PAD),
+se DEBE dividir el proceso en subprompts (2a, 2b, 2c...) de la siguiente manera:
+- Prompt 2a: "Escribir en Excel las columnas 1 a 10: [Col1], [Col2]..."
+- Prompt 2b: "Continuar escribiendo en la misma fila las columnas 11 a 20: [Col11], [Col12]..."
+NUNCA omitir campos del PDD por falta de espacio.
 
-**Principio 7 — Acciones soportadas por Copilot PAD:**
+**Principio 7 — Acciones soportadas y Complejidad UI:**
 Solo generar prompts para acciones que Copilot PAD puede crear:
   SOPORTADAS: Variables, Condiciones (If/Else), Bucles (For Each/Loop),
     Excel (Launch, Read, Write, Close), Archivos y Carpetas (Copy, Move, Delete, Get files),
     Outlook (Launch, Get Email Messages, Send Email), Web basico (Launch browser, navigate),
     Sistema (Run application, Get special folder, Wait), Texto (Trim, Split, Replace),
-    Fecha y hora, Matematicas
+    Fecha y hora, Matematicas.
   NO SOPORTADAS (solo nota_desarrollador): SAP GUI, UI Automation compleja con selectores
     XPath/CSS especificos, PowerShell scripts, grabacion de pantalla, Image Recognition.
     Para estas escribir en nota_desarrollador: "Esta accion requiere grabacion manual con
     el grabador de PAD. Copilot insertara un placeholder que debes completar."
 
-**Principio 8 — Nomenclatura de acciones y subflujos (Buenas Practicas Beecker):**
+**Principio 8 — Granularidad y Cobertura (1 a N):**
+No limitarse a 4 prompts por requerimiento. Generar de 1 a N prompts segun sea necesario
+para cubrir entre el 80% y 100% de la funcionalidad descrita en el PDD/JSON.
+Si un requerimiento tiene 10 pasos logicos, generar 6-8 prompts si es necesario para
+mantener la precision y no perder detalles.
+
+**Principio 9 — Bucles, Iteraciones y Archivos Adjuntos:**
+- Si el proceso implica procesar varios elementos (correos, archivos, filas), el prompt DEBE incluir explicitamente la accion "For Each" o "Loop".
+- Diferenciar claramente entre EXTRACCION de texto y GUARDADO de archivos.
+- Si el PDD dice "Guardar factura adjunta", usar la accion "Save Outlook email attachments" (o similar para archivos locales) en lugar de intentar extraer texto del archivo si no se pide explicitamente.
+
+**Principio 10 — Validaciones Robustas:**
+Evitar validaciones basadas UNICAMENTE en comparacion de texto literal si el PDD sugiere
+patrones. Ej: En lugar de "asunto es igual a DUCA", usar "asunto contiene la palabra DUCA
+y tiene una longitud de X caracteres" si el contexto lo permite.
+
+**Principio 11 — Nomenclatura de acciones y subflujos (Buenas Practicas Beecker):**
   Subflujos: UpperCamelCase con nombre de aplicacion principal (ej: JDE_DescargarLM, Excel_AjustarEC)
   PROHIBIDO: acentos, caracteres especiales (#, ?, /, \, :, *, Ñ), numeracion tipo "accion1"
   Variables: PROHIBIDO hardcode de credenciales, rutas, nombres de archivo, correos en acciones
@@ -73,18 +91,16 @@ Solo generar prompts para acciones que Copilot PAD puede crear:
 
 ## Estructura de prompts por requerimiento
 
-Para cada requerimiento con puede_generar = true, generar EN ESTE ORDEN:
+Para cada requerimiento con puede_generar = true, generar una secuencia de 1 a N prompts
+respetando el flujo logico y asegurando cobertura total (80-100%):
 
-### Prompt 1 — Variables e inicializacion (el mas importante, contexto de sesion)
+### Paso 1: Variables e inicializacion (Contexto de sesion)
 
-Este prompt establece TODAS las variables que usara el subflow.
-Copilot recuerda estas variables en los prompts siguientes de la sesion.
-
-Estructura del prompt:
+Establece TODAS las variables que usara el subflow.
 "Inicializar variable de texto [Str{NombreReq}Ruta] con la ruta [rutaArchivo\aqui\va\la\ruta\{NombreArchivo}].
 Inicializar variable de texto [StrEstadoEjecucion] con valor vacio.
 Inicializar variable de texto [StrModulo] con valor '{NombreSubflow}'.
-{Si hay variables adicionales especificas del req: Inicializar variable {tipo} [Prefijo{NombreVar}] con {valor_inicial}.}"
+{Variables adicionales del PDD: [Prefijo{NombreVar}] con {valor_inicial}.}"
 
 Reglas:
 - [Str{NombreReq}Ruta]: si el PDD define el nombre del archivo de input, usarlo directamente.
@@ -100,86 +116,28 @@ Posicionarse dentro del subflow antes de pegar. Nombre sugerido: {NombreSubflow}
 sin acentos ni espacios. Agregar al inicio una accion Comentario con: descripcion del subflow,
 req ID {req.id}, precondiciones y postcondiciones."
 
-### Prompt 2 — Accion principal (especifica por tipo de sistema)
+### Paso 2: Logica de Proceso (Dividir en tantos prompts como sea necesario)
 
-El prompt debe describir la accion ESPECIFICA del req, no una accion generica.
-Incluir: sistema exacto, archivo con ruta o placeholder, hoja si aplica, columnas si las lista el PDD.
+Cada prompt debe ser especifico y no superar los 500 caracteres.
 
-**Para Excel (lectura):**
-"Abrir el archivo Excel [Str{NombreReq}Ruta] con la accion Launch Excel.
-Leer el rango de la hoja [{NombreHoja}] con Read from Excel Worksheet y
-guardar en [dt_{NombreReq}].
-{Si el PDD lista columnas: Las columnas a leer son: {Col1}, {Col2}, {Col3}... (listar TODAS).}"
+**Manejo de Iteraciones (Ejemplo correos/archivos):**
+"Obtener mensajes de correo con Get Email Messages filtrando por asunto '{Asunto}' y guardar en [LstCorreos].
+Para cada correo en [LstCorreos]: extraer el cuerpo en [StrCuerpo] y guardar los adjuntos en la carpeta [StrRutaAdjuntos]."
 
-nota_desarrollador: "Verificar ruta exacta del archivo. Nombre de hoja: [{NombreHoja}].
-Si el prompt no alcanzo a listar todas las columnas, ejecutar Prompt 2b (continuacion)."
+**Extraccion Masiva de Campos (Respetar Principio 6):**
+"De la variable [StrCuerpo], extraer los siguientes campos: {Campo1}, {Campo2}, {Campo3}, {Campo4}, {Campo5}... {Si no caben todos, crear Prompt 2b para los restantes}."
 
-**Para Excel (escritura con columnas especificas):**
-"En el archivo Excel [{NombreArchivo}.xlsx], hoja [{NombreHoja}], escribir en la siguiente
-fila disponible los valores: columna {Col1} <- [Str{Var1}], columna {Col2} <- [Str{Var2}]...
-{Si hay muchas columnas y no caben: ver Prompt 2b.}"
+**Acciones en Excel / Sistemas:**
+"Abrir el archivo Excel [Str{NombreReq}Ruta]. En la hoja [{NombreHoja}], escribir en la siguiente fila: {Col1} <- [Var1], {Col2} <- [Var2]... {Seguir listando TODOS los campos del PDD}."
 
-**Para UI de sistema legacy (JDE, SAP, SEADEX, SIESA, Oracle, AS400):**
-"Abrir navegador Chrome y navegar a [{https://url-del-sistema-aqui}].
-Esperar a que cargue la pagina de inicio de sesion usando la accion
-'Esperar al contenido de la ventana'.
-Hacer clic en el campo usuario e ingresar [StrUsuario].
-Hacer clic en el campo contrasena e ingresar [StrContrasena].
-Hacer clic en el boton Ingresar."
+### Paso 3: Manejo de Errores y Excepciones
 
-nota_desarrollador: "ACCION UI DETECTADA: Copilot insertara un placeholder de grabacion.
-Usar el grabador de PAD para capturar los selectores reales de {sistema}.
-Habilitar 'Simular accion' en cada elemento UI cuando el control lo permita.
-Nombrar cada ventana como '{Sistema} - {descripcion}' y cada elemento por tipo
-(cuadro de texto, boton, lista desplegable). URL del sistema: [{https://url-aqui}]."
+Generar prompts especificos para las excepciones del PDD. Si son muchas, agrupar o separar.
+"Agregar bloque 'On block error' con nombre '{NombreSubflow}_Handler'. Si ocurre {Excepcion}: establecer [StrEstadoEjecucion] en 'Error', llamar AddToLog con mensaje '{Mensaje}' y enviar correo de notificacion."
 
-**Para Outlook (envio):**
-"Usar la accion Launch Outlook para abrir la aplicacion.
-Crear un borrador de correo con Send Email: destinatarios en [StrDestinatarios],
-asunto '{AsuntoExactoDelPDD}', cuerpo '{CuerpoDelTemplate}'.
-{Si tiene adjunto: Adjuntar el archivo [Str{NombreReq}Ruta].}"
+### Paso 4: Cierre y Logs (Se pueden consolidar si son pasos breves)
 
-nota_desarrollador: "Segun politica Beecker, los correos creados por robots deben guardarse
-como borradores para revision humana si contienen informacion sensible. Toda la info del
-correo (asunto, cuerpo, destinatarios) debe ser parametrizable, no hardcodeada."
-
-**Para SharePoint (descarga via UI de navegador):**
-"Abrir navegador Chrome y navegar a [{https://sharepoint-url-aqui}].
-Esperar al contenido de la pagina con 'Esperar al contenido de la ventana'.
-Localizar el archivo [{NombreArchivo}.xlsx] en la carpeta [{rutaCarpetaSharePoint}].
-Hacer clic en Descargar y guardar en [Str{NombreReq}Ruta]."
-
-nota_desarrollador: "ACCION UI sobre SharePoint web: usar grabador de PAD para selectores del
-navegador. Ruta en SharePoint: [{rutaCarpetaSharePoint}]. Si hay API de SharePoint disponible
-considerar migracion a Cloud Flow para este req."
-
-**Para lectura de correos (extraccion de datos):**
-"Usar la accion Get Email Messages de Outlook con filtro de asunto que contenga
-'{AsuntoFiltroDelPDD}'. Guardar los correos en [Lst{NombreReq}Correos].
-Para cada correo en [Lst{NombreReq}Correos], extraer: asunto en [StrAsunto],
-remitente en [StrRemitente], cuerpo en [StrCuerpo], adjuntos en [Lst{NombreReq}Adjuntos]."
-
-### Prompt 3 — Manejo de errores (solo si el req tiene excepciones definidas)
-
-"Agregar bloque 'On block error' despues de las acciones anteriores con nombre
-'{NombreSubflow}_ErrorHandler'. Si ocurre {condicion_exacta_del_PDD}: establecer
-[StrEstadoEjecucion] en 'Error'. Llamar subflujo AddToLog con [StrModulo],
-mensaje '{MensajeExactoDelPDD}' y nivel 'Error'.
-{Si hay correo de notificacion: Usar Send Email con asunto '{AsuntoExacto}'.}"
-
-nota_desarrollador: "Excepciones completas del req:
-{listar TODAS las excepciones del req en formato: condicion -> accion completa -> log}
-Configurar 'Al producirse error' directamente sobre acciones criticas si aplica.
-REGLA Beecker: enviar como minimo un log AddToLog en cada manejo de errores."
-
-Si el prompt excede 500 chars con todas las excepciones, dividir en Prompt 3a, 3b por excepcion.
-
-### Prompt 4 — Registro en log de ejecucion
-
-"Abrir el archivo Excel de log [rutaLog\aqui\va\la\ruta\Log_{NombreProyecto}.xlsx]
-con Launch Excel. Escribir en la siguiente fila disponible: fecha y hora actual
-con accion Get Current Date and Time en [DtFechaEjecucion], modulo [StrModulo],
-proceso '{NombreReqExacto}', estado [StrEstadoEjecucion]. Guardar y cerrar con Close Excel."
+"Escribir en el log de ejecucion [{RutaLog}]: Fecha actual, Modulo [StrModulo], Proceso '{NombreReq}', Estado [StrEstadoEjecucion]. Cerrar todas las aplicaciones y archivos abiertos."
 
 nota_desarrollador: "Configurar la ruta del archivo de log como parametro global al inicio
 del flow principal, no como hardcode aqui. Columnas del log: Fecha, Modulo, Proceso, Estado.

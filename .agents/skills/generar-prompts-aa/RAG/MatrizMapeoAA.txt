@@ -1,0 +1,38 @@
+# Base de Conocimiento Técnico: Matriz de Mapeo de Comandos A360 y Reglas Restrictivas
+
+Este documento define la traducción ESTRICTA entre las acciones lógicas solicitadas en los análisis (JSON) y los comandos técnicos reales que el Agente debe usar al generar prompts para Automation Anywhere A360 Copilot.
+
+## 1. MATRIZ DE MAPEO DE COMANDOS (JSON -> A360)
+
+| Acción solicitada en el JSON | Comando A360 Obligatorio | Notas de Arquitectura (Beecker Best Practices) |
+| :--- | :--- | :--- |
+| "Crear variable", "Inicializar" | `String: Assign`, `Number: Assign`, `Boolean: Assign` | PROHIBIDO pedir "crear variables" sin usar un comando de Assign. Forzar la creación en el Variable Manager. |
+| "Obtener valor de Config/Vault" | `Dictionary: Get` | Usar siempre el diccionario principal `$dictConfig$`. Asignar el output a una variable local con prefijo correcto. |
+| "Hacer clic en UI", "Extraer texto" | `Recorder: Capture` | PROHIBIDO usar variables automáticas. Ordenar siempre: "ASIGNA a variable 'windowName' SIN crear variables de captura". |
+| "Interactuar con SAP" | `SAP: Click`, `SAP: Set Text`, `SAP: Get Text` | Priorizar paquete SAP nativo (Regla 6.27). Para escribir texto (`Set Text`), exigir siempre un delay de 40ms (Regla 6.15). |
+| "Leer/Escribir en Excel" | `Excel Advanced: Open`, `Excel Advanced: Get multiple cells`, etc. | PROHIBIDO usar 'Excel Basic' o 'Simulate Keystrokes' para manipular celdas (Regla 6.16). |
+| "Manejo de fechas" | `Datetime: Assign`, `Datetime: To String` | Usar para generar sufijos de fecha en reportes. |
+| "Llamar API / Web Service" | `REST Web Service: Post Method` / `Get Method` | Asignar la respuesta a un Diccionario para parseo JSON. |
+| "Abrir sistema / navegador" | `Application: Open` o `Browser: Open` | Asignar el control a una variable de tipo Window. |
+
+## 2. CATÁLOGO DE LIMITACIONES DEL COPILOT ("DO NOT ATTEMPT")
+El Copilot de A360 tiene barreras técnicas. Si el JSON exige alguna de estas acciones, el Agente NO DEBE intentar generar el código. En su lugar, debe usar el comando `Comment`.
+
+* **Llamada a Sub-Bots (Taskbots hijos):** El Copilot no puede crear el archivo `.bot` ni vincularlo. 
+    * *Solución del Agente:* `DENTRO del Step, agrega un Comment: 'Desarrollador: Insertar llamada a Taskbot hijo [Nombre] aquí'.`
+* **Try-Catch Global:** El Copilot falla al intentar envolver múltiples Steps en un Try-Catch masivo.
+    * *Solución del Agente:* Asumir que el Try-Catch ya existe. Generar los Steps atómicos para que el desarrollador los arrastre dentro del Try-Catch principal del archivo Main.
+* **Extracción masiva de Excel lenta:** No usar Loops nativos para más de 100,000 filas.
+    * *Solución del Agente:* Pedir el uso de Scripts (Python/VBS) mediante un `Comment` o el paquete de ejecución de scripts de A360.
+
+## 3. CHEAT-SHEET DE NOMENCLATURA ESTRICTA (Variables)
+Toda variable generada en los prompts debe tener uno de estos prefijos según su tipo de dato:
+
+* `str` : String (ej. strUser)
+* `num` : Number (ej. numRetryCount)
+* `b` : Boolean (ej. bIsSuccess)
+* `dict` : Dictionary (ej. dictConfig)
+* `lst` : List (ej. lstEmails)
+* `tbl` : Table (ej. tblReportData)
+* `window` : Window (ej. windowSAP, windowChrome)
+* `dt` : Datetime (ej. dtCurrentDate)
