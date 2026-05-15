@@ -9,7 +9,9 @@ description: |
 
 # Skill: Generar Prompts Power Automate Cloud Flow
 
-**REGLA MANDATARIA — Leer Buenas Practicas:** Antes de comenzar cualquier generacion de prompts, el agente DEBE leer el archivo `resources/BuenasPracticas.md` de esta skill y aplicar sus lineamientos.
+**REGLA MANDATARIA — Leer recursos antes de generar:** Antes de comenzar cualquier generacion de prompts, el agente DEBE leer:
+1. `resources/BuenasPracticas.md` — y aplicar sus lineamientos.
+2. `resources/acciones.md` — para usar los nombres exactos de acciones y conectores soportados.
 
 ## Principios de prompting para Copilot Cloud — basados en documentacion oficial y foros
 
@@ -83,41 +85,32 @@ mantener la precision y no perder detalles.
 Evitar validaciones basadas UNICAMENTE en comparacion de texto literal si el PDD sugiere
 patrones. Ej: Validar longitud de cadena o presencia de palabras clave combinadas.
 
+**Principio 14 — Fidelidad de texto en valores de prompt (acentos y puntuacion):**
+Los valores textuales del PDD (nombres de columnas, asuntos de correo, mensajes de error,
+nombres de tablas/listas de SharePoint) se reproducen en el prompt EXACTAMENTE como aparecen
+en el PDD, incluyendo acentos, tildes, enes con tilde y puntuacion.
+EXCEPCION: los NOMBRES de variables siguen la regla Beecker (sin acentos, CamelCase).
+Esta excepcion aplica SOLO a nombres de codigo, nunca a valores textuales o etiquetas de UI.
+Ejemplo:
+  PDD dice columna SharePoint: "Número de factura"
+  INCORRECTO: columna 'Numero de factura'
+  CORRECTO:   columna 'Número de factura'
+
+**Principio 15 — Datos dinamicos vs. datos estaticos en Cloud:**
+Al describir valores en el Prompt 2 (inicializacion de variables):
+  ESTATICO: valor fijo entre ejecuciones (nombre de un flow, un texto de configuracion).
+    En el prompt: "tipo texto con valor 'ValorFijo'" — escribir el valor literal.
+    En nota_desarrollador: indicar que debe venir de configuracion, no hardcodeado.
+  DINAMICO: cambia cada ejecucion (datos del trigger, resultados de una accion anterior).
+    En el prompt: "tipo texto con valor vacio (se llena con el trigger o accion posterior)."
+    En nota_desarrollador: documentar de donde se obtiene el valor dinamico.
+PROHIBIDO: inicializar una variable dinamica con un valor estatico de ejemplo.
+
 ---
 
-## Nombres exactos de acciones y triggers (obligatorio usar estos, nunca parafrasear)
-
-### Office 365 Outlook
-  Trigger: Cuando llega un nuevo correo electronico (V3)
-  Obtener correo electronico (V2)
-  Enviar un correo electronico (V2) — solo si no tiene info sensible; sino: crear borrador
-  Mover correo electronico (V2)
-  Obtener adjuntos (V2)
-  Exportar correo electronico (V2)
-
-### SharePoint
-  Trigger: Cuando se crea o modifica un elemento
-  Trigger: Cuando se crea un archivo
-  Obtener elementos | Obtener elemento | Crear elemento | Actualizar elemento
-  Obtener contenido del archivo | Crear archivo | Eliminar elemento
-  Enviar una solicitud HTTP a SharePoint
-
-### Excel Online (Business)
-  Listar las filas presentes en una tabla
-  Agregar una fila a una tabla
-  Obtener una fila | Actualizar una fila | Eliminar una fila
-  Ejecutar script
-
-### Control / General
-  Inicializar variable | Establecer variable | Incrementar variable | Anexar a la variable de cadena
-  Condicion | Aplicar a cada uno | Hacer hasta | Ambito | Terminar | Redactar
-  Analizar JSON | Filtrar matriz | Seleccionar | Unirse | Crear tabla HTML | HTTP
-
-### Otros conectores frecuentes
-  OneDrive for Business: Crear archivo | Obtener contenido del archivo | Crear carpeta
-  Teams: Publicar un mensaje en un chat o canal
-  Approvals: Iniciar y esperar una aprobacion
-  Dataverse: Agregar una nueva fila | Listar filas | Actualizar una fila
+> **Referencia de acciones y conectores:** Consultar `resources/acciones.md` para la lista
+> completa de conectores, triggers y acciones con nombres exactos, sufijos de versión (V2/V3)
+> y parámetros obligatorios. NUNCA parafrasear los nombres de acciones.
 
 ---
 
@@ -126,7 +119,7 @@ patrones. Ej: Validar longitud de cadena o presencia de palabras clave combinada
 Para cada req con puede_generar = true, generar una secuencia de 1 a N prompts
 asegurando cobertura total (80-100%):
 
-### Paso 1: Trigger (Prompt independiente)
+### [STAGE:trigger] Paso 1 — Trigger (Prompt independiente)
 
 "Crear un Cloud Flow automatizado con el trigger {TriggerExacto} del conector
 {ConectorExacto}{, filtrado por {condicion_exacta_del_PDD} si aplica}."
@@ -145,7 +138,16 @@ Agregar descripcion al flujo con: proposito, condiciones previas, referencia al 
 nota_desarrollador: "Conector: {ConectorExacto}. Configurar filtros del trigger en el panel
 de diseno despues de generarlo (ej: filtro de asunto, sitio de SharePoint, carpeta)."
 
-### Prompt 2 — Inicializar variables (max 5 en ramas paralelas por Beecker)
+### [STAGE:variables] Prompt 2 — Inicializar variables (max 5 en ramas paralelas por Beecker)
+
+**PROTOCOLO DE COMPLETITUD DE VARIABLES (ejecutar ANTES de escribir el Prompt 2):**
+1. Leer el array "acciones" y "reglas_negocio" completos del req en el JSON de analisis.
+2. Identificar TODOS los datos que el flow necesitara almacenar durante su ejecucion.
+3. Incluir TODAS en el Prompt 2, con tipo y valor inicial correcto.
+4. Si hay mas de 5 variables: dividir en Prompt 2a (primeras 5) y Prompt 2b (siguientes).
+5. Verificar que NINGUNA variable aparece por primera vez en el Prompt 3 o siguientes
+   sin haber sido inicializada en el Prompt 2. En Cloud, las variables deben existir
+   antes de poder usarlas en el flow.
 
 Estructura: "Agregar la accion Inicializar variable {N} veces usando ramas paralelas:
 la primera llamada Str{NombreVar1} de tipo texto con valor '{valorInicial}',
@@ -165,7 +167,7 @@ nota_desarrollador: "Maximo 5 ramas paralelas recomendado por Beecker para conse
 legibilidad. Si hay mas de 5 variables, dividir en dos acciones de ramas paralelas.
 Tipos: texto (String), numero entero (Int), booleano (Bln), array (Arr), objeto (Obj)."
 
-### Paso 3: Logica de Proceso (1 a N prompts)
+### [STAGE:logic] Paso 3 — Logica de Proceso (1 a N prompts)
 
 **Manejo de Iteraciones:**
 "Agregar la accion Aplicar a cada uno (Apply to each) para iterar sobre [Lista/Adjuntos].
@@ -224,7 +226,7 @@ nota: El bloque True debe tener la accion principal. PROHIBIDO bloque True vacio
 "Usando el conector Outlook, obtener adjuntos del correo. Para cada adjunto: usar el conector SharePoint
 para la accion Crear archivo en la carpeta '{Ruta}'."
 
-### Prompt 4 — Manejo de errores y Logs
+### [STAGE:errors] Prompt 4 — Manejo de errores y Logs
 
 "Agregar Ambito '{Nombre}_ManejadorErrores'. Si falla: enviar correo '{Asunto}' y establecer StrEstadoEjecucion en 'Error'. Finalizar con Terminar Fallido."
 
@@ -269,39 +271,96 @@ Para cada sub-req con puede_generar = true:
 
 ---
 
-## Estructura JSON de salida
+## Formato de salida — archivo `_prompts.md`
 
-{
-  "id_flujo": "[req.id]",
-  "nombre_flujo": "[req.nombre exacto]",
-  "plataforma": "Cloud Flow",
-  "generar_prompt": true,
-  "gaps_detectados": {
-    "criticos": [],
-    "advertencias": [],
-    "impacto": "Sin gaps detectados."
-  },
-  "prompts_secuenciales": [
-    {
-      "numero_prompt": 1,
-      "titulo": "Trigger del flujo",
-      "instruccion_previa": "Pegar en 'Crear tu automatizacion con Copilot' en Power Automate...",
-      "prompt": "texto en una sola linea continua sin corchetes en variables, sin \n internos",
-      "caracteres": 187,
-      "acciones_cubiertas": ["descripcion de que cubre este prompt"],
-      "variables_referenciadas": ["StrNombreVar (sin corchetes en Cloud)"],
-      "nota_desarrollador": "instruccion post-Copilot especifica con valores reales o placeholders"
-    }
-  ],
-  "resumen_cobertura": "4 prompts para Cloud Flow. Cubren: trigger -> variables -> [conector] -> errores.",
-  "pasos_manuales_requeridos": [
-    "Descripcion especifica de lo que Copilot no puede generar en Cloud"
-  ],
-  "sub_prompts": []
-}
+El skill genera UN ÚNICO archivo `.md` con TODOS los requerimientos del proyecto.
+El archivo cubre los reqs con `puede_generar: true` leídos del `_analisis.json`.
+Nombre del archivo: `<CODIGO>_prompts.md` (ej: FCM_001_prompts.md).
 
-## Campos eliminados (no incluir)
-motivo_no_generado, _resumen a nivel raiz.
+### Plantilla de estructura del archivo
+
+```
+# Prompts — [CODIGO_PROYECTO] — Power Automate Cloud
+
+**Proyecto:** [nombre exacto del proyecto]
+**Cliente:** [cliente]
+**Versión PDD:** [version]
+**Tecnología:** Power Automate Cloud Flow (Copilot Cloud — límite 2000 chars/prompt)
+**Generado:** [fecha]
+
+---
+
+## REQ_01 — [Nombre exacto del requerimiento]
+
+> **Instrucción previa Prompt 1:** Pegar en 'Crear tu automatización con Copilot'
+> en make.powerautomate.com > + Crear > Con Copilot.
+
+---
+
+### Prompt 1 — Trigger | ~NNN chars
+
+[texto del trigger en una sola línea continua. Variables sin corchetes: StrNombreVar]
+
+**Acciones cubiertas:** Trigger del flujo — [nombre del trigger exacto]
+**Nota para el desarrollador:** [configurar filtros del trigger en el panel de diseño]
+
+---
+
+### Prompt 2 — Inicializar variables | ~NNN chars
+
+> **Instrucción previa:** Pegar en el panel Copilot dentro del diseñador.
+
+[texto del prompt]
+
+**Acciones cubiertas:** Inicialización de N variables en ramas paralelas.
+**Nota para el desarrollador:** [tipos, origen de valores dinámicos]
+
+---
+
+### Prompt 3 — [Descripción de la lógica] | ~NNN chars
+
+[texto del prompt]
+
+**Acciones cubiertas:** [qué parte del req cubre]
+**Nota para el desarrollador:** [notas específicas]
+
+---
+
+### Prompt 4 — Manejo de errores | ~NNN chars
+
+[texto del prompt]
+
+**Nota para el desarrollador:** [configurar RunAfter, excepciones del req]
+
+---
+
+**Pasos manuales requeridos para REQ_01:**
+- [Paso que Copilot no puede generar]
+
+---
+
+## REQ_02 — [Nombre exacto del requerimiento]
+
+[misma estructura...]
+
+---
+
+## Resumen de cobertura
+
+| REQ | Nombre | Prompts | Estado |
+|-----|--------|---------|--------|
+| REQ_01 | [nombre] | N | Generado |
+| REQ_02 | [nombre] | N | Generado |
+
+**Pasos manuales globales del proyecto:**
+- [Paso manual global]
+```
+
+**Reglas del archivo de salida:**
+- Variables sin corchetes: `StrNombreVar` nunca `[StrNombreVar]`
+- El texto de cada prompt va en un bloque de código en una sola línea continua
+- Trigger siempre en Prompt 1 con instrucción de pegar en la página de creación de Power Automate
+- Prompts 2+ con instrucción de pegar en el panel Copilot del diseñador
 
 ---
 
@@ -317,3 +376,6 @@ motivo_no_generado, _resumen a nivel raiz.
 8. Si el PDD lista columnas, estan todas en el prompt o en nota_desarrollador con aviso?
 9. Hay nota de borrador para correos con informacion sensible (politica Beecker)?
 10. Los scopes tienen nombres descriptivos (no "Ambito 1", "Ambito 2")?
+11. Todas las variables del Prompt 3+ aparecen tambien inicializadas en el Prompt 2?
+12. Los valores textuales del PDD (columnas, asuntos, nombres de lista) preservan acentos exactos?
+13. Las variables dinamicas estan inicializadas con valor vacio en Prompt 2 con nota de origen?

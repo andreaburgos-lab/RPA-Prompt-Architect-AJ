@@ -9,7 +9,9 @@ description: |
 
 # Skill: Generar Prompts Power Automate Desktop (PAD)
 
-**REGLA MANDATARIA — Leer Buenas Practicas:** Antes de comenzar cualquier generacion de prompts, el agente DEBE leer el archivo `resources/BuenasPracticas.md` de esta skill y aplicar sus lineamientos.
+**REGLA MANDATARIA — Leer recursos antes de generar:** Antes de comenzar cualquier generacion de prompts, el agente DEBE leer:
+1. `resources/BuenasPracticas.md` — y aplicar sus lineamientos.
+2. `resources/acciones.md` — para usar los nombres exactos de acciones soportadas por Copilot PAD.
 
 ## Principios de prompting para Copilot PAD — basados en documentacion oficial y foros
 
@@ -18,10 +20,18 @@ Si el prompt omite parametros obligatorios de una accion PAD (ruta de archivo, n
 URL), Copilot deja el campo vacio y marca la accion como error. SIEMPRE incluir el valor real
 o un placeholder descriptivo con formato [rutaArchivo\aqui\va\la\ruta.xlsx].
 
-**Principio 2 — Contexto de sesion:**
-Copilot PAD mantiene contexto dentro de la sesion. El Prompt 1 establece variables y rutas;
-los prompts siguientes pueden referenciarlas sin repetir. El Prompt 1 es el mas importante:
-debe ser comprehensivo con objetivos, variables y rutas base.
+**Principio 2 — Variables globales y contexto de sesion:**
+Las variables en PAD son GLOBALES al proyecto — una variable inicializada en el Prompt 1 de
+REQ_01 SI esta disponible en REQ_02 y todos los subflows siguientes. Esto es una ventaja para
+compartir configuracion, pero tambien fuente de errores de asignacion entre ciclos.
+REGLA: Al final de cada subflow (Paso 4 — Logs), restablecer TODAS las variables del req
+a su valor por defecto vacio antes de terminar, para evitar que un valor de un ciclo o
+req anterior contamine la siguiente ejecucion.
+Ejemplo de restablecimiento en Prompt 4:
+  "Asignar [StrEstadoEjecucion] con valor vacio."
+  "Asignar [dt_DatosCorreo] con valor Nothing."
+Copilot PAD mantiene contexto DENTRO de la sesion activa. El Prompt 1 establece
+variables y rutas; los prompts siguientes pueden referenciarlas sin repetir.
 
 **Principio 3 — Variables entre llaves:**
 Las variables en prompts PAD van entre corchetes: [StrNombreVariable].
@@ -82,6 +92,44 @@ Evitar validaciones basadas UNICAMENTE en comparacion de texto literal si el PDD
 patrones. Ej: En lugar de "asunto es igual a DUCA", usar "asunto contiene la palabra DUCA
 y tiene una longitud de X caracteres" si el contexto lo permite.
 
+**Principio 12 — Extraccion de texto vs. recorte de texto (CRITICO — accion incorrecta frecuente):**
+Distinguir SIEMPRE entre estas dos operaciones diferentes:
+  RECORTE (Trim text / Recortar texto):
+    - Elimina espacios en blanco del inicio y final de un string ya obtenido.
+    - Usar SOLO cuando el valor ya esta en una variable y tiene espacios sobrantes.
+  EXTRACCION (Get text from window / captura con Recorder):
+    - Obtiene un valor de un elemento de pantalla, correo, PDF o aplicacion.
+    - Usar cuando el texto esta visible en una interfaz.
+  SUBCADENA (Get subtext / Obtener subcadena de texto):
+    - Extrae una porcion especifica de un string ya en memoria.
+    - Usar para obtener un campo de un cuerpo de correo o texto ya capturado.
+PROHIBIDO: usar 'Recortar texto' cuando el PDD dice 'extraer [campo] de [fuente]'.
+El prompt debe especificar la accion correcta segun la fuente real del dato.
+
+**Principio 13 — Fidelidad de texto en valores de prompt (acentos y puntuacion):**
+Los valores textuales del PDD (asuntos de correo, nombres de columnas, mensajes de excepcion,
+nombres de hojas, etiquetas de campos) se reproducen en el prompt EXACTAMENTE como aparecen
+en el PDD, incluyendo:
+  - Acentos: a con tilde, e con tilde, i, o, u con tilde, u con dieresis, n con tilde, N con tilde
+  - Signos de puntuacion: comas, puntos, dos puntos exactos del PDD
+  - Mayusculas y minusculas: respetar el uso del PDD
+EXCEPCION: los NOMBRES de variables y subflows siguen la regla Beecker (sin acentos,
+UpperCamelCase). Esta excepcion aplica SOLO a nombres de codigo, nunca a valores de datos.
+Ejemplo:
+  PDD dice columna: "Número de DTE"
+  INCORRECTO en prompt: "columna Numero de DTE"
+  CORRECTO en prompt:   "columna [Número de DTE]"
+
+**Principio 14 — Datos dinamicos vs. datos estaticos:**
+Al inicializar variables en el Prompt 1, clasificar cada dato como:
+  ESTATICO: valor fijo que no cambia entre ejecuciones (ruta de carpeta, nombre de hoja).
+    En el prompt: inicializar con el valor literal del PDD.
+    En nota_desarrollador: indicar que debe venir del archivo de configuracion, no hardcodeado.
+  DINAMICO: cambia cada ejecucion (fecha de hoy, datos de un correo, resultado de extraccion).
+    En el prompt: "Inicializar [StrVariable] con valor vacio (se obtendra en Paso 2)."
+    En nota_desarrollador: documentar de donde y como se llena el valor dinamico.
+PROHIBIDO: inicializar una variable dinamica con un valor estatico de ejemplo.
+
 **Principio 11 — Nomenclatura de acciones y subflujos (Buenas Practicas Beecker):**
   Subflujos: UpperCamelCase con nombre de aplicacion principal (ej: JDE_DescargarLM, Excel_AjustarEC)
   PROHIBIDO: acentos, caracteres especiales (#, ?, /, \, :, *, Ñ), numeracion tipo "accion1"
@@ -95,7 +143,23 @@ y tiene una longitud de X caracteres" si el contexto lo permite.
 Para cada requerimiento con puede_generar = true, generar una secuencia de 1 a N prompts
 respetando el flujo logico y asegurando cobertura total (80-100%):
 
-### Paso 1: Variables e inicializacion (Contexto de sesion)
+### [STAGE:variables] Paso 1 — Variables e inicializacion (Contexto de sesion)
+
+**PROTOCOLO DE COMPLETITUD DE VARIABLES (ejecutar ANTES de escribir el Prompt 1):**
+1. Leer el array "acciones" COMPLETO del req en el JSON de analisis.
+2. Leer el array "reglas_negocio" completo del req.
+3. Identificar CADA dato que el subflow necesitara en memoria durante su ejecucion:
+   - Cada archivo de entrada o salida: variable Str (ruta) o dt_ (datos)
+   - Cada valor a extraer de correo, PDF o pantalla: variable Str
+   - Cada acumulador de estado o bandera logica: variable Bln o Int
+   - Cada lista de elementos a iterar: variable Lst o dt_
+4. Incluir TODAS estas variables en el Prompt 1, inicializadas a su valor por defecto.
+   Las variables dinamicas se inicializan con valor vacio — documentar en nota_desarrollador
+   de donde y como se llena cada una.
+5. Verificar que NINGUNA variable del Prompt 2 o siguientes es nueva (no declarada en Prompt 1).
+   Si hay variables nuevas en Prompt 2+: regresar al Prompt 1 y agregarlas antes de guardar.
+Copilot PAD puede perder el contexto de inicializacion si la variable aparece por primera vez
+fuera del Prompt 1.
 
 Establece TODAS las variables que usara el subflow.
 "Inicializar variable de texto [Str{NombreReq}Ruta] con la ruta [rutaArchivo\aqui\va\la\ruta\{NombreArchivo}].
@@ -117,7 +181,7 @@ Posicionarse dentro del subflow antes de pegar. Nombre sugerido: {NombreSubflow}
 sin acentos ni espacios. Agregar al inicio una accion Comentario con: descripcion del subflow,
 req ID {req.id}, precondiciones y postcondiciones."
 
-### Paso 2: Logica de Proceso (Dividir en tantos prompts como sea necesario)
+### [STAGE:logic] Paso 2 — Logica de Proceso (Dividir en tantos prompts como sea necesario)
 
 Cada prompt debe ser especifico y no superar los 500 caracteres.
 
@@ -171,18 +235,20 @@ como borradores para revision humana si contienen informacion sensible. Toda la 
 correo (asunto, cuerpo, destinatarios) debe ser parametrizable, no hardcodeada."
 
 
-### Paso 3: Manejo de Errores y Excepciones
+### [STAGE:errors] Paso 3 — Manejo de Errores y Excepciones
 
 Generar prompts especificos para las excepciones del PDD. Si son muchas, agrupar o separar.
 "Agregar bloque 'On block error' con nombre '{NombreSubflow}_Handler'. Si ocurre {Excepcion}: establecer [StrEstadoEjecucion] en 'Error', llamar AddToLog con mensaje '{Mensaje}' y enviar correo de notificacion."
 
-### Paso 4: Cierre y Logs (Se pueden consolidar si son pasos breves)
+### [STAGE:log] Paso 4 — Cierre y Logs (Se pueden consolidar si son pasos breves)
 
-"Escribir en el log de ejecucion [{RutaLog} o [rutaLog\aqui\va\la\ruta]\{NombreArchivoLog}.xlsx]: Fecha actual, Modulo [StrModulo], Proceso '{NombreReq}', Estado [StrEstadoEjecucion]. Cerrar todas las aplicaciones y archivos abiertos."
+"Escribir en el log de ejecucion [{RutaLog} o [rutaLog\aqui\va\la\ruta]\{NombreArchivoLog}.xlsx]: Fecha actual, Modulo [StrModulo], Proceso '{NombreReq}', Estado [StrEstadoEjecucion]. Cerrar todas las aplicaciones y archivos abiertos. Restablecer [StrEstadoEjecucion] con valor vacio. Restablecer [dt_{NombreReq}] con valor Nothing."
 
 nota_desarrollador: "Configurar la ruta del archivo de log como parametro global al inicio
 del flow principal, no como hardcode aqui. Columnas del log: Fecha, Modulo, Proceso, Estado.
-Segun Beecker, usar subflujo AddToLog del Framework con variables StrLevel, StrModule, StrMessageLog."
+Segun Beecker, usar subflujo AddToLog del Framework con variables StrLevel, StrModule, StrMessageLog.
+IMPORTANTE: Restablecer TODAS las variables del req a su valor vacio/Nothing al finalizar
+para evitar contaminacion de datos en ciclos o reqs posteriores (ver Principio 2)."
 
 ---
 
@@ -212,51 +278,93 @@ Para cada sub-requerimiento con puede_generar = true dentro de un req:
 
 ---
 
-## Estructura JSON de salida
+## Formato de salida — archivo `_prompts.md`
 
-{
-  "id_flujo": "[req.id]",
-  "nombre_flujo": "[req.nombre exacto]",
-  "plataforma": "Desktop Flow",
-  "generar_prompt": true,
-  "gaps_detectados": {
-    "criticos": [],
-    "advertencias": [],
-    "impacto": "Sin gaps detectados. | Prompts generados con advertencias. | No se generaron prompts."
-  },
-  "prompts_secuenciales": [
-    {
-      "numero_prompt": 1,
-      "titulo": "Variables e inicializacion",
-      "instruccion_previa": "ANTES DE PEGAR ESTE PROMPT: Crear manualmente el subflow '{NombreSubflow}'...",
-      "prompt": "texto en una sola linea continua sin saltos de linea, con variables en [Corchetes]",
-      "caracteres": 234,
-      "acciones_cubiertas": ["descripcion de que parte del req cubre este prompt"],
-      "variables_referenciadas": ["[StrNombreVar1]", "[dt_NombreVar2]"],
-      "nota_desarrollador": "instruccion post-Copilot: que ajustar, que verificar, que grabar manualmente"
-    }
-  ],
-  "resumen_cobertura": "4 prompts para Desktop Flow. Cubren: variables -> [sistema] -> errores -> log.",
-  "pasos_manuales_requeridos": [
-    "Descripcion especifica de lo que Copilot no puede generar y el dev debe hacer"
-  ],
-  "sub_prompts": [
-    {
-      "id_subflujo": "[sub_req.id]",
-      "nombre_subflujo": "[sub_req.nombre]",
-      "plataforma": "Desktop Flow",
-      "generar_prompt": true,
-      "gaps_detectados": { "criticos": [], "advertencias": [] },
-      "prompts_secuenciales": [],
-      "pasos_manuales_requeridos": []
-    }
-  ]
-}
+El skill genera UN ÚNICO archivo `.md` con TODOS los requerimientos del proyecto.
+El archivo cubre los reqs con `puede_generar: true` leídos del `_analisis.json`.
+Nombre del archivo: `<CODIGO>_prompts.md` (ej: FCM_001_prompts.md).
 
-## Campos eliminados del JSON (no incluir)
-Los siguientes campos de versiones anteriores NO deben aparecer en el JSON de salida:
-motivo_no_generado (reemplazado por gaps_detectados.impacto),
-_resumen (nivel raiz), prompts (nivel raiz con subprompts concatenados).
+### Plantilla de estructura del archivo
+
+```
+# Prompts — [CODIGO_PROYECTO] — Power Automate Desktop
+
+**Proyecto:** [nombre exacto del proyecto]
+**Cliente:** [cliente]
+**Versión PDD:** [version]
+**Tecnología:** Power Automate Desktop (Copilot PAD — límite 500 chars/prompt)
+**Generado:** [fecha]
+
+---
+
+## REQ_01 — [Nombre exacto del requerimiento]
+
+> **Instrucción previa:** ANTES DE PEGAR ESTE PROMPT: Crear manualmente el subflow
+> '[NombreSubflow]' (Menú Subflows > Nuevo subflujo). Copilot no puede crear subflows.
+> Posicionarse dentro del subflow antes de pegar.
+
+---
+
+### Prompt 1 — Variables e inicialización | [NombreSubflow] | ~NNN chars
+
+[texto del prompt en una sola línea continua con variables en [Corchetes]]
+
+**Acciones cubiertas:** Inicialización de N variables del subflow.
+**Nota para el desarrollador:** [instrucción post-Copilot: qué ajustar, qué grabar, qué verificar]
+
+---
+
+### Prompt 2 — [Descripción de la lógica] | ~NNN chars
+
+[texto del prompt]
+
+**Acciones cubiertas:** [qué parte del req cubre]
+**Nota para el desarrollador:** [notas]
+
+---
+
+### Prompt 3 — Manejo de errores | ~NNN chars
+
+[texto del prompt]
+
+**Nota para el desarrollador:** [notas]
+
+---
+
+### Prompt 4 — Log y cierre | ~NNN chars
+
+[texto del prompt]
+
+**Nota para el desarrollador:** [notas]
+
+**Pasos manuales requeridos para REQ_01:**
+- [Paso que Copilot no puede generar]
+- [Otro paso manual]
+
+---
+
+## REQ_02 — [Nombre exacto del requerimiento]
+
+[misma estructura...]
+
+---
+
+## Resumen de cobertura
+
+| REQ | Nombre | Prompts | Estado |
+|-----|--------|---------|--------|
+| REQ_01 | [nombre] | N | Generado |
+| REQ_02 | [nombre] | N | Generado |
+
+**Pasos manuales globales del proyecto:**
+- [Paso manual que aplica a todo el proyecto]
+```
+
+**Reglas del archivo de salida:**
+- El texto de cada prompt va en un bloque de código (``` ```) en una sola línea continua
+- El encabezado de cada prompt incluye el número, descripción y estimado de caracteres
+- Los sub-requerimientos van como sub-secciones `### Sub-REQ_01.1` dentro del REQ padre
+- Advertencias de gaps menores documentadas al inicio de cada REQ afectado
 
 ---
 
@@ -272,3 +380,8 @@ _resumen (nivel raiz), prompts (nivel raiz con subprompts concatenados).
 8. Los nombres de subflows usan UpperCamelCase sin acentos ni caracteres especiales?
 9. Las acciones de UI tienen nota_desarrollador indicando grabacion manual?
 10. El correo de error tiene el asunto EXACTO del PDD, no un texto generico?
+11. Todas las variables del Prompt 2+ aparecen tambien inicializadas en el Prompt 1?
+12. Los valores textuales del PDD (columnas, asuntos, mensajes) preservan acentos y puntuacion exacta?
+13. Las variables dinamicas estan inicializadas con valor vacio en Prompt 1 con nota de como se llenan?
+14. El Paso 4 incluye restablecimiento de variables a vacio/Nothing al finalizar el subflow?
+15. La accion de extraccion de texto usa la accion correcta segun la fuente (no Trim cuando es extraccion)?

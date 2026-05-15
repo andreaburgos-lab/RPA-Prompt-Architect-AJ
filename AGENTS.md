@@ -31,27 +31,27 @@ Se reconoce si las primeras líneas contienen `@document` o `@seccion`
 
 ## Reglas de nomenclatura de outputs
 
-| Código proyecto | Nombre archivo análisis    | Nombre archivo prompts    |
-|-----------------|----------------------------|---------------------------|
-| FCM.001         | FCM_001_analisis.json      | FCM_001_prompts.json      |
-| PDC.002         | PDC_002_analisis.json      | PDC_002_prompts.json      |
-| MMC.001         | MMC_001_analisis.json      | MMC_001_prompts.json      |
+| Código proyecto | Nombre archivo análisis    | Nombre archivo prompts  |
+|-----------------|----------------------------|-------------------------|
+| FCM.001         | FCM_001_analisis.json      | FCM_001_prompts.md      |
+| PDC.002         | PDC_002_analisis.json      | PDC_002_prompts.md      |
+| MMC.001         | MMC_001_analisis.json      | MMC_001_prompts.md      |
 
 Regla: reemplazar `.` por `_` en el código del proyecto.
 
-## Reglas para el campo "prompt" en el JSON de prompts
+## Reglas para el texto de cada prompt en el .md de salida
 
-El campo `prompt` contiene ÚNICAMENTE el texto que el usuario copia y pega en Copilot.
+El bloque de código de cada prompt contiene ÚNICAMENTE el texto que el usuario copia y pega en Copilot.
 - Sin encabezados de sección (sin "OBJETIVO:", "ACCIONES:", "REGLAS:")
 - Sin metadatos del req
-- Sin saltos de línea decorativos
+- Sin saltos de línea internos — texto continuo separado por punto y espacio
 - Texto directo, accionable, listo para pegar
 
-El contexto, las notas y las instrucciones van en campos SEPARADOS:
-- `instruccion_previa` → qué hacer ANTES de pegar el prompt
-- `nota_desarrollador` → qué hacer DESPUÉS de aplicar el prompt
-- `acciones_cubiertas` → qué parte del PDD cubre este prompt
-- `pasos_manuales_requeridos` → lo que Copilot no puede generar
+El contexto y las notas se colocan FUERA del bloque de código:
+- `> **Instrucción previa:**` → qué hacer ANTES de pegar el prompt (antes del bloque)
+- `> **Nota para el desarrollador:**` → qué configurar DESPUÉS (después del bloque)
+- `**Acciones cubiertas:**` → qué parte del PDD cubre este prompt
+- `**Pasos manuales requeridos:**` → lo que Copilot no puede generar
 
 ## Manejo de nombres de archivos en prompts
 
@@ -65,22 +65,29 @@ Nunca usar nombres genéricos si el PDD tiene el nombre real.
 | output: Plantilla Conciliación.xlsx        | "guardar en Plantilla Conciliación.xlsx"    |
 | output: NotificaciónConciliación           | "generar la notificación de conciliación"   |
 
-## Reglas globales de formato JSON — OBLIGATORIAS para todos los skills
+## Reglas globales de formato — OBLIGATORIAS para todos los skills
 
-### Prompts en una sola línea
-El campo  en cualquier JSON generado DEBE ser una cadena de texto continua sin saltos de línea.
-Separar las instrucciones con punto y espacio. NUNCA incluir  dentro del valor del campo prompt.
+### Texto del prompt: una sola línea continua
+El texto dentro del bloque de código ` ``` ` en el `.md` DEBE ser una cadena continua sin saltos de línea internos.
+Separar las instrucciones con punto y espacio.
 
-  INCORRECTO: {"prompt": "Abrir Excel.
-Leer datos."}
-  CORRECTO:   {"prompt": "Abrir Excel. Leer datos con Read from Excel Worksheet."}
+  INCORRECTO:
+  ```
+  Abrir Excel.
+  Leer datos.
+  ```
+  CORRECTO:
+  ```
+  Abrir Excel. Leer datos con Read from Excel Worksheet desde la hoja 'Hoja1'.
+  ```
 
-### Sin escapes unicode
-Todos los campos de texto en el JSON deben usar caracteres UTF-8 directamente.
-NUNCA usar secuencias de escape unicode como , , , , .
+### Sin escapes unicode en ningún archivo generado
+Todos los archivos de salida (JSON de análisis y .md de prompts) deben usar caracteres UTF-8 directamente.
+NUNCA usar secuencias de escape unicode.
 
-  INCORRECTO: {"titulo": "Acción principal"}
-  CORRECTO:   {"titulo": "Acción principal"}
+  INCORRECTO: "Acción principal"
+  CORRECTO:   "Acción principal"
 
-Esta regla aplica a TODOS los campos: titulo, prompt, instruccion_previa, nota_desarrollador,
-acciones_cubiertas, resumen_cobertura, pasos_manuales_requeridos, y cualquier otro campo de texto.
+### JSON de análisis: formato interno
+El archivo `_analisis.json` sigue su propio esquema definido en el skill `generar-analisis`.
+El archivo `_prompts.md` sigue el formato markdown definido en cada skill generador de prompts.

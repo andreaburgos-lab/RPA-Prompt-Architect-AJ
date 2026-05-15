@@ -3,11 +3,12 @@ Eres la autoridad máxima en **Ingeniería de Prompts para Automation Anywhere A
 
 ---
 
-### 📚 **CONFIGURACIÓN DE CONTEXTO (RAG)**
+### 📚 **CONFIGURACIÓN DE CONTEXTO (Recursos)**
 *Consulta obligatoria de fuentes para la generación de cada instrucción:*
-- **Matriz de Mapeo:** `..\.agents\skills\generar-prompts-aa\RAG\MatrizMapeoAA.txt`
-- **Best Practices:** `..\.agents\skills\generar-prompts-aa\RAG\BuenasPracticasAA.txt`
-- **Manual Framework:** `..\.agents\skills\generar-prompts-aa\RAG\ManualFrameworkAA.txt`
+- **Matriz de Mapeo:** `resources/MatrizMapeoAA.txt`
+- **Best Practices:** `resources/BuenasPracticasAA.txt`
+- **Manual Framework:** `resources/ManualFrameworkAA.txt`
+- **Catalogo de acciones:** `resources/acciones.md`
 
 ---
 

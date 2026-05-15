@@ -39,7 +39,17 @@ Autopilot NO puede acceder a:
 
 ## Principios de prompting para Autopilot — basados en documentacion oficial y comunidad
 
-**REGLA MANDATARIA — Leer Buenas Practicas:** Antes de comenzar cualquier generacion de prompts, el agente DEBE leer el archivo `resources/BuenasPracticas.md` de esta skill y aplicar sus lineamientos.
+**REGLA MANDATARIA — Leer recursos antes de generar:** Antes de comenzar cualquier generacion de prompts, el agente DEBE leer:
+1. `resources/BuenasPracticas.md` — y aplicar sus lineamientos.
+2. `resources/acciones.md` — para usar los nombres exactos de actividades soportadas por Autopilot.
+
+**Principio 0 — Limites de caracteres de Autopilot (CRITICO — aplicar siempre):**
+Autopilot tiene limites duros segun el tipo de entrada:
+  - Text-to-Workflow (panel Autopilot / anotacion de Sequence): maximo **300 caracteres** por prompt.
+  - Expression Editor (generacion de expresiones VB/C#): maximo **256 caracteres**.
+El texto se trunca silenciosamente si se excede el limite — el motor no avisa.
+Si el contenido necesario supera 300 caracteres, OBLIGATORIO dividir en Prompt 2a, 2b, etc.
+El campo de estimacion en el JSON de salida es `caracteres_estimados` (no `palabras_estimadas`).
 
 **Principio 1 — Acciones pequenas y concretas (Granularidad 1 a N):**
 Autopilot genera secuencias mas precisas cuando se le dan pasos concretos y separados.
@@ -103,6 +113,15 @@ o la reutilice si ya existe. Usar nomenclatura Beecker con prefijo de tipo:
   GenericValue -> gv_ -> gv_NombreVariable
 En el prompt: "store result in variable str_RutaArchivo" o "save emails to lst_Correos"
 
+**Principio 7b — Variables deben estar entre comillas para que Autopilot las reconozca:**
+Autopilot detecta variables existentes en el workflow SOLO si se referencian entre comillas
+simples o dobles en el prompt. Sin comillas, Autopilot puede crear una variable nueva en vez
+de reusar la existente.
+  INCORRECTO: "store result in str_RutaArchivo"
+  CORRECTO:   "store result in 'str_RutaArchivo'"
+  CORRECTO:   "store result in \"str_RutaArchivo\""
+Aplica a TODAS las referencias a variables en prompts Text-to-Workflow.
+
 **Principio 8 — UI Automation requiere Object Repository previo:**
 Autopilot usa matching semantico del OR para encontrar elementos UI.
 El prompt debe referenciar el nombre EXACTO del elemento como esta en el OR.
@@ -155,7 +174,7 @@ en el mismo archivo XAML. Aprovechar esto:
 
 Para cada requerimiento generar una secuencia de 1 a N prompts asegurando cobertura total (80-100%):
 
-### Paso 1: Inicializacion de variables y configuracion
+### [STAGE:variables] Paso 1 — Inicializacion de variables y configuracion
 
 Establece TODAS las variables del workflow y la configuracion inicial.
 Autopilot las recuerda en prompts siguientes del mismo archivo XAML.
@@ -178,12 +197,16 @@ Reglas:
 - Si hay asset de Orchestrator: indicar en instruccion_previa que debe existir
 
 instruccion_previa (Studio Desktop): "ANTES DE PEGAR ESTE PROMPT:
+0. GUARDAR EL PROYECTO (Ctrl+S) antes de usar Autopilot. Autopilot lee el archivo
+   XAML guardado en disco — sin guardar, no detecta variables creadas en pasos anteriores.
 1. En Studio Desktop, abrir o crear el archivo XAML '[NombreWorkflow].xaml'.
 2. Agregar una Sequence vacia al canvas. Clic derecho > Add Annotation.
 3. Activar la anotacion y pegar el prompt. Hacer clic en Generate.
 4. PRERREQUISITOS que deben existir antes de ejecutar:
    [listar: assets en Orchestrator, queues, elementos en OR, rutas de archivo]
-5. Nomenclatura de variables: prefijo de tipo Beecker (str_, dt_, int_, bln_, lst_)."
+5. Nomenclatura de variables: prefijo de tipo Beecker (str_, dt_, int_, bln_, lst_).
+6. Las variables referenciadas en el prompt deben ir entre comillas simples o dobles
+   para que Autopilot las reconozca (ej: 'str_RutaArchivo')."
 
 instruccion_previa (Studio Web): "ANTES DE PEGAR ESTE PROMPT:
 1. En Studio Web, abrir el workflow [NombreWorkflow].
@@ -192,7 +215,7 @@ instruccion_previa (Studio Web): "ANTES DE PEGAR ESTE PROMPT:
    Actions > Annotate with Autopilot.
 3. PRERREQUISITOS: [listar assets, queues, OR elements, rutas]."
 
-### Prompt 2 — Logica principal (especifica por tipo de sistema/actividad)
+### [STAGE:logic] Prompt 2 — Logica principal (especifica por tipo de sistema/actividad)
 
 Describe la accion ESPECIFICA del req. Incluir: sistema, archivo con ruta,
 hoja si aplica, columnas, condiciones y variables por nombre.
@@ -239,10 +262,14 @@ Type str_Contrasena into [NombreCampoContrasena_EnOR].
 Click on [NombreBotonLogin_EnOR]."
 
 nota_desarrollador: "PRERREQUISITO CRITICO: Los elementos UI deben existir en el
-Object Repository con los nombres exactos usados en el prompt antes de generar.
-Si no existen, capturarlos con el App/Web Recorder primero. Nombres requeridos en OR:
-[NombreElemento_EnOR], [NombreCampoUsuario_EnOR], [NombreCampoContrasena_EnOR],
-[NombreBotonLogin_EnOR]. URL del sistema: [https://url-aqui]."
+Object Repository con los nombres exactos usados en el prompt ANTES de ejecutar Autopilot.
+Autopilot usa matching semantico del OR — si el elemento no existe, la actividad UI
+generada no funcionara. Pasos previos obligatorios:
+1. Capturar todos los elementos UI con el App/Web Recorder de Studio.
+2. Asignar nombres descriptivos en el OR (los mismos usados en el prompt).
+3. Guardar el proyecto (Ctrl+S) antes de usar Autopilot.
+Nombres requeridos en OR: [NombreElemento_EnOR], [NombreCampoUsuario_EnOR],
+[NombreCampoContrasena_EnOR], [NombreBotonLogin_EnOR]. URL del sistema: [https://url-aqui]."
 
 **Para UI Automation - Desktop (aplicacion):**
 "Use Application activity to open '[C:\Ruta\Aplicacion.exe]'.
@@ -252,7 +279,9 @@ Type [valor] into [NombreCampoEnOR].
 Click on [NombreBotonEnOR].
 Get Text from [NombreResultadoEnOR] and store in str_Resultado."
 
-nota_desarrollador: "Elementos UI requeridos en Object Repository: [lista de nombres].
+nota_desarrollador: "PRERREQUISITO CRITICO: Capturar los elementos UI con el App Recorder
+ANTES de ejecutar Autopilot. Guardar el proyecto (Ctrl+S) antes de usar Autopilot.
+Elementos UI requeridos en Object Repository: [lista de nombres].
 Si la aplicacion usa SAP GUI, IBM AS400 u otro sistema legacy, puede requerirse
 el Extension de UiPath para ese sistema. Verificar que la Extension este instalada."
 
@@ -290,7 +319,7 @@ Autopilot no puede crear connections dinamicamente."
 [O: Write text str_Contenido to file '[C:\RPA\[Proyecto]\[archivo.txt]]'.]
 [O para CSV: Read CSV file '[C:\RPA\[Proyecto]\[archivo.csv]]' store in dt_[NombreReq].]"
 
-### Prompt 3 — Manejo de errores y excepciones
+### [STAGE:errors] Prompt 3 — Manejo de errores y excepciones
 
 Solo generar si el req tiene excepciones definidas en el PDD.
 
@@ -310,7 +339,7 @@ manejo de errores con nivel Error y modulo identificable."
 
 Si el prompt excede lo comodo con todas las excepciones, dividir en Prompt 3a, 3b.
 
-### Prompt 4 — Log de ejecucion y cierre
+### [STAGE:log] Prompt 4 — Log de ejecucion y cierre
 
 "Assign str_Status = 'Success' if not already set to Error.
 Log message with level Information: '[NombreReq] completed with status: ' + str_Status.
@@ -354,107 +383,108 @@ Para cada sub-requerimiento con puede_generar = true dentro de un req:
 
 ---
 
-## Actividades soportadas vs. no soportadas por Autopilot
-
-### SOPORTADAS (generar prompt normal):
-- Variables y asignaciones (Assign, Set Variable)
-- Condiciones (If/Else, Switch)
-- Bucles (For Each, While, Do While)
-- Excel: Read Range, Write Range, Append Range, Read Cell, Write Cell,
-  Get Workbook Sheet, Sort Data Table, Filter Data Table
-- Correo: Get Mail Messages, Send Mail (SMTP/Exchange/Outlook/Gmail)
-- Archivos y carpetas: Copy File, Move File, Delete File, Get Files,
-  Create Directory, Path Exists, Read Text File, Write Text File
-- Orquestador: Get Asset, Get Credential, Add Queue Item, Get Transaction Item,
-  Set Transaction Status, Add Log Fields
-- UI Automation basica con OR: Click, Type Into, Get Text, Check App State,
-  Use Application/Browser, Navigate To URL, Hover, Select Item
-- HTTP / API: HTTP Request (configuracion basica)
-- Texto: Matches, Split, Trim, Replace, Concatenate
-- Fecha y hora: Get Current Date and Time, Add Time to DateTime
-- Matematicas: operaciones aritmeticas basicas en expresiones
-- Log Message (todos los niveles)
-- Delay / Wait
-- Invoke Workflow File (referenciar otro XAML existente)
-- Integration Service connectors (si la conexion ya existe en Orchestrator)
-
-### PARCIALMENTE SOPORTADAS (generar prompt + nota_desarrollador):
-- UI Automation compleja: Autopilot puede generar el scope y actividades basicas,
-  pero los selectores avanzados o dinamicos requieren ajuste manual en UiExplorer.
-  nota_desarrollador: "Verificar y ajustar selectores generados con UiExplorer."
-- Document Understanding: Autopilot puede generar el scope, pero el modelo ML
-  y los campos de extraccion requieren configuracion manual.
-- REFramework: Autopilot genera actividades dentro de un estado/secuencia,
-  pero no crea la estructura REFramework completa.
-
-### NO SOPORTADAS (solo nota_desarrollador, no generar prompt):
-- Crear Assets, Queues o Buckets en Orchestrator
-- Capturar elementos en el Object Repository
-- Configurar conexiones de Integration Service
-- Computer Vision con coordenadas o imagenes de referencia
-- Scripts PowerShell embebidos (generar como Invoke Power Shell con placeholder)
-- Actividades de SAP con transacciones especificas de SAP GUI (requieren grabacion)
-- Configurar REFramework o estructura de proyecto desde cero
-Para estas escribir en nota_desarrollador: "Esta accion requiere configuracion manual.
-[Descripcion exacta de los pasos manuales que el desarrollador debe realizar.]"
+> **Referencia de actividades:** Consultar `resources/acciones.md` para la lista completa
+> de actividades soportadas, parcialmente soportadas y no soportadas por Autopilot,
+> con los nombres exactos de paquete y parámetros obligatorios.
 
 ---
 
-## Estructura JSON de salida
+## Formato de salida — archivo `_prompts.md`
 
-{
-  "id_flujo": "[req.id]",
-  "nombre_flujo": "[req.nombre exacto]",
-  "plataforma": "Studio Desktop | Studio Web",
-  "generar_prompt": true,
-  "gaps_detectados": {
-    "criticos": [],
-    "advertencias": [],
-    "impacto": "Sin gaps detectados. | Prompts generados con advertencias. | No se generaron prompts."
-  },
-  "prerrequisitos": {
-    "object_repository": ["Elemento1EnOR", "Elemento2EnOR"],
-    "assets_orchestrator": ["NombreAsset1 (tipo: Credential, carpeta: X)", "NombreAsset2"],
-    "queues_orchestrator": ["NombreQueue1 (carpeta: X)"],
-    "rutas_locales": ["C:\\RPA\\Proyecto\\Archivo.xlsx"],
-    "conexiones_integration_service": ["NombreConector1"],
-    "paquetes_nuget": ["UiPath.Excel.Activities", "UiPath.Mail.Activities"]
-  },
-  "prompts_secuenciales": [
-    {
-      "numero_prompt": 1,
-      "titulo": "Inicializacion de variables",
-      "plataforma_prompt": "Studio Desktop | Studio Web",
-      "instruccion_previa": "ANTES DE PEGAR: [pasos exactos incluyendo prerrequisitos]",
-      "prompt": "texto del prompt en lenguaje natural claro, verbos de accion, variables por nombre",
-      "palabras_estimadas": 80,
-      "actividades_cubiertas": ["Assign str_RutaArchivo", "Assign str_Status", "Log Message"],
-      "variables_referenciadas": ["str_RutaArchivo", "str_Status", "str_Module", "dt_Datos"],
-      "nota_desarrollador": "instruccion post-Autopilot: que ajustar, que verificar, que configurar manualmente"
-    }
-  ],
-  "resumen_cobertura": "4 prompts para [plataforma]. Cubren: variables -> [sistema/actividad principal] -> errores -> log.",
-  "pasos_manuales_requeridos": [
-    "Descripcion especifica de lo que Autopilot no puede generar y el dev debe hacer"
-  ],
-  "sub_prompts": [
-    {
-      "id_subflujo": "[sub_req.id]",
-      "nombre_subflujo": "[sub_req.nombre]",
-      "plataforma": "Studio Desktop | Studio Web",
-      "generar_prompt": true,
-      "gaps_detectados": { "criticos": [], "advertencias": [] },
-      "prerrequisitos": {},
-      "prompts_secuenciales": [],
-      "pasos_manuales_requeridos": []
-    }
-  ]
-}
+El skill genera UN ÚNICO archivo `.md` con TODOS los requerimientos del proyecto.
+El archivo cubre los reqs con `puede_generar: true` leídos del `_analisis.json`.
+Nombre del archivo: `<CODIGO>_prompts.md` (ej: FCM_001_prompts.md).
 
-## Campos eliminados del JSON (no incluir)
-Los siguientes campos NO deben aparecer en el JSON de salida:
-motivo_no_generado (reemplazado por gaps_detectados.impacto),
-_resumen (nivel raiz), prompts (nivel raiz concatenado sin estructura).
+### Plantilla de estructura del archivo
+
+```
+# Prompts — [CODIGO_PROYECTO] — UiPath Autopilot
+
+**Proyecto:** [nombre exacto del proyecto]
+**Cliente:** [cliente]
+**Versión PDD:** [version]
+**Tecnología:** UiPath Autopilot ([Studio Desktop | Studio Web])
+**Límite de caracteres:** 300 chars (Text-to-Workflow) / 256 chars (Expression Editor)
+**Generado:** [fecha]
+
+## Prerrequisitos globales del proyecto
+- **Object Repository:** [Elemento1EnOR], [Elemento2EnOR]
+- **Assets de Orchestrator:** [NombreAsset1 (tipo: Credential, carpeta: X)]
+- **Queues de Orchestrator:** [NombreQueue1 (carpeta: X)]
+- **Paquetes NuGet:** UiPath.Excel.Activities, UiPath.Mail.Activities
+- **Rutas locales:** C:\RPA\[Proyecto]\[Archivo.xlsx]
+
+---
+
+## REQ_01 — [Nombre exacto del requerimiento]
+
+> **Instrucción previa:**
+> 0. GUARDAR EL PROYECTO (Ctrl+S) antes de usar Autopilot.
+> 1. Abrir o crear el archivo XAML '[NombreWorkflow].xaml'.
+> 2. Agregar Sequence vacía. Clic derecho > Add Annotation.
+> 3. Prerrequisitos específicos de este req: [listar]
+
+---
+
+### Prompt 1 — Variables e inicialización | ~NNN chars
+
+[texto del prompt en una sola línea. Variables entre comillas: 'str_Nombre']
+
+**Actividades cubiertas:** Assign str_FilePath, Assign str_Status, Log Message
+**Nota para el desarrollador:** [instrucción post-Autopilot]
+
+---
+
+### Prompt 2 — [Descripción de la lógica] | ~NNN chars
+
+[texto del prompt]
+
+**Actividades cubiertas:** [lista]
+**Nota para el desarrollador:** [notas]
+
+---
+
+### Prompt 3 — Manejo de errores | ~NNN chars
+
+[texto del prompt]
+
+**Nota para el desarrollador:** [notas]
+
+---
+
+### Prompt 4 — Log y cierre | ~NNN chars
+
+[texto del prompt]
+
+**Nota para el desarrollador:** [notas]
+
+**Pasos manuales requeridos para REQ_01:**
+- [Paso que Autopilot no puede generar]
+
+---
+
+## REQ_02 — [Nombre exacto del requerimiento]
+
+[misma estructura...]
+
+---
+
+## Resumen de cobertura
+
+| REQ | Nombre | Prompts | Plataforma | Estado |
+|-----|--------|---------|------------|--------|
+| REQ_01 | [nombre] | N | Studio Desktop | Generado |
+| REQ_02 | [nombre] | N | Studio Web | Generado |
+
+**Pasos manuales globales del proyecto:**
+- [Paso manual que aplica a todo el proyecto]
+```
+
+**Reglas del archivo de salida:**
+- Variables entre comillas simples en el prompt: `'str_NombreVar'`
+- Límite estricto de 300 chars por prompt — dividir en 2a/2b si se supera
+- Sub-requerimientos como sub-secciones `#### Sub-REQ_01.1` dentro del REQ padre
+- Prerrequisitos globales del proyecto en un bloque al inicio del archivo
 
 ---
 
@@ -521,3 +551,6 @@ Create a new Word document, write str_LogContent into it, and save as
 10. El campo plataforma_prompt refleja correctamente Studio Desktop o Studio Web segun el PDD?
 11. El JSON incluye el campo prerrequisitos con todos los recursos que deben existir antes de ejecutar?
 12. Las actividades_cubiertas por prompt son <= 8 para garantizar generacion precisa?
+13. Ningun prompt Text-to-Workflow supera 300 caracteres? (Expression Editor: 256 max)
+14. Las variables referenciadas en el prompt estan entre comillas simples o dobles?
+15. La instruccion_previa incluye el paso 0 de guardar el proyecto (Ctrl+S) antes de Autopilot?

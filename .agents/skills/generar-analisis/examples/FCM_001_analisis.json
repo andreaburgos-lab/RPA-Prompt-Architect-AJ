@@ -1,0 +1,116 @@
+{
+  "proyecto": "FCM.001",
+  "nombre": "Automatización de conciliación bancaria",
+  "tecnologia_rpa": "Power Automate Desktop",
+  "tech_key": "power_automate_desktop",
+  "version": "1.2",
+  "cliente": "Empresa Ejemplo S.A.",
+  "fecha_emision": "2025-04-10",
+  "requerimientos": [
+    {
+      "id": "REQ_01",
+      "nombre": "Descarga y procesamiento de extracto bancario",
+      "puede_generar": true,
+      "sistemas": ["Outlook", "Excel"],
+      "inputs": [
+        {
+          "nombre": "Extracto Bancario Mensual.xlsx",
+          "tipo": "archivo Excel",
+          "fuente": "adjunto de correo electrónico con asunto 'Extracto Banco'"
+        }
+      ],
+      "outputs": [
+        {
+          "nombre": "Conciliación_FCM.xlsx",
+          "formato": "Excel",
+          "destino": "carpeta de red \\\\servidor\\Conciliaciones\\"
+        }
+      ],
+      "acciones": [
+        "Abrir Outlook y filtrar correos por asunto 'Extracto Banco' de los últimos 7 días",
+        "Descargar el archivo adjunto 'Extracto Bancario Mensual.xlsx' a la carpeta temporal",
+        "Abrir el archivo Excel descargado",
+        "Leer el rango de datos desde la celda A2 hasta la última fila con datos de la hoja 'Movimientos'",
+        "Para cada fila del DataTable: si la columna 'Estado' es igual a 'Pendiente', copiar la fila al archivo Conciliación_FCM.xlsx",
+        "Guardar y cerrar Conciliación_FCM.xlsx",
+        "Mover el correo procesado a la carpeta 'Procesados' de Outlook"
+      ],
+      "reglas_negocio": [
+        "Solo procesar correos de los últimos 7 días",
+        "Solo copiar filas con Estado = 'Pendiente'",
+        "El archivo de salida debe contener únicamente las filas pendientes, no el extracto completo"
+      ],
+      "excepciones": [
+        {
+          "nombre": "No se encontró correo con extracto bancario",
+          "condicion": "No existe ningún correo con asunto 'Extracto Banco' en los últimos 7 días",
+          "accion": "Registrar en log con estado 'Advertencia'. Enviar correo de notificación a soporte@empresa.com con asunto 'FCM.001 — Sin extracto bancario'. Finalizar el proceso sin error crítico."
+        },
+        {
+          "nombre": "Archivo adjunto no es Excel",
+          "condicion": "El adjunto del correo no tiene extensión .xlsx",
+          "accion": "Registrar en log con estado 'Error'. Enviar correo de notificación a soporte@empresa.com. Marcar el correo como no leído para reprocesamiento manual."
+        }
+      ],
+      "informacion_faltante": [],
+      "gaps": {
+        "criticos": [],
+        "advertencias": ["Ruta exacta de la carpeta de red no especificada en el PDD — se usará placeholder"],
+        "puede_generar": true
+      },
+      "sub_requerimientos": []
+    },
+    {
+      "id": "REQ_02",
+      "nombre": "Notificación de resultado del proceso",
+      "puede_generar": true,
+      "sistemas": ["Outlook"],
+      "inputs": [
+        {
+          "nombre": "Log_FCM.xlsx",
+          "tipo": "archivo Excel de log",
+          "fuente": "generado por el proceso en carpeta de red \\\\servidor\\Logs\\"
+        }
+      ],
+      "outputs": [
+        {
+          "nombre": "Correo de notificación",
+          "formato": "correo electrónico",
+          "destino": "soporte@empresa.com y responsable@empresa.com"
+        }
+      ],
+      "acciones": [
+        "Leer el estado final del proceso del archivo Log_FCM.xlsx — columna 'Estado' de la última fila",
+        "Si el estado es 'Éxito': construir cuerpo del correo con resumen de filas procesadas y fecha",
+        "Si el estado es 'Error': construir cuerpo del correo con descripción del error y pasos sugeridos",
+        "Enviar correo con asunto 'FCM.001 — Resultado Conciliación [fecha]' como borrador para revisión humana",
+        "Adjuntar el archivo Conciliación_FCM.xlsx si el estado es 'Éxito'"
+      ],
+      "reglas_negocio": [
+        "El correo debe guardarse como borrador — no enviar automáticamente (política Beecker)",
+        "El asunto del correo debe incluir la fecha del proceso en formato DD/MM/YYYY"
+      ],
+      "excepciones": [
+        {
+          "nombre": "Log vacío o no encontrado",
+          "condicion": "El archivo Log_FCM.xlsx no existe o está vacío",
+          "accion": "Enviar correo de alerta a soporte@empresa.com con asunto 'FCM.001 — Log no disponible'. No adjuntar archivo."
+        }
+      ],
+      "informacion_faltante": [],
+      "gaps": {
+        "criticos": [],
+        "advertencias": [],
+        "puede_generar": true
+      },
+      "sub_requerimientos": []
+    }
+  ],
+  "resumen_gaps": {
+    "total_reqs": 2,
+    "reqs_con_gaps_criticos": 0,
+    "reqs_con_advertencias": 1,
+    "reqs_sin_gaps": 1,
+    "camino": "🟡 Camino B — Modo interactivo (gaps menores)"
+  }
+}
